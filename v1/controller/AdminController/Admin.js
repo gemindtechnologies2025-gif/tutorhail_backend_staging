@@ -5675,6 +5675,39 @@ module.exports.getClassById = async (req, res, next) => {
     next(error);
   }
 };
+
+// Get Class Slots by Class ID
+module.exports.getClassSlots = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    
+    // Check if class exists
+    const classData = await Model.Classes.findOne({
+      _id: ObjectId(req.params.id),
+      isDeleted: false,
+      setting: constants.SETTING.PUBLISH
+    });
+    
+    if (!classData) {
+      throw new Error(constants.MESSAGES[lang].CLASS_NOT_FOUND);
+    }
+
+    // Get class slots for the specific class
+    const classSlots = await Model.ClassSlots.find({
+      classId: ObjectId(req.params.id),
+      status: true
+    }).sort({ date: 1, startTime: 1 });
+
+    return res.success(constants.MESSAGES[lang].DATA_FETCHED, {
+      classId: req.params.id,
+      totalSlots: classSlots.length,
+      classslots: classSlots
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports.deleteClass = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";

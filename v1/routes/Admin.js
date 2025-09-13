@@ -113,6 +113,7 @@ router.get("/tutorList", Auth.verify("admin"), Controller.AdminController.tutorL
 router.post("/addClass", Auth.verify("admin"), Controller.AdminController.addClass);
 router.get("/getClass", Auth.verify("admin"), Controller.AdminController.getClass);
 router.get("/getClass/:id", Auth.verify("admin"), Controller.AdminController.getClassById);
+router.get("/getClassSlots/:id", Auth.verify("admin"), Controller.AdminController.getClassSlots);
 router.put("/updateClass/:id", Auth.verify("admin"), Controller.AdminController.updateClass);
 router.delete("/deleteClass/:id", Auth.verify("admin"), Controller.AdminController.deleteClass);
 router.get("/classExport", Auth.verify("admin"), Controller.AdminController.classExport);
