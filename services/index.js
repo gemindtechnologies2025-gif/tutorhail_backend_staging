@@ -3,7 +3,6 @@ module.exports = {
     CryptoEncypt: require("./CryptoEncypt"),
     EmalService: require("./EmalService"),
     PushNotificationService: require("./PushNotificationService"),
-    RateLimitService: require("./RateLimitService"),
     SmsService: require("./SmsService"),
     SubAdmin: require("./SubAdmin"),
     Swagger: require("./Swagger"),
