@@ -5312,10 +5312,29 @@ module.exports.getClass = async (req, res, next) => {
           as: "userBookings"
         }
       },{
+        $lookup: {
+          from: "classslots",
+          let: { classId: "$_id" },
+          pipeline: [{
+              $match: {
+                $expr: { $eq: ["$classId", "$$classId"] },
+                status: true,
+                date: { $gte: new Date() }  // Only future slots
+              }
+            },
+            {
+              $sort: { date: 1, startTime: 1 }  // Earliest future first
+            },
+            { $limit: 1 }
+          ],
+          as: "nextSlot"
+        }
+      },{
         $addFields: {
           isClassBooked: { 
           $gt: [ { $size: { $ifNull: ["$userBookings", []] } }, 0 ] 
-        }
+        },
+        nextSlot: { $arrayElemAt: ["$nextSlot", 0] }
       }
     },{
         $match: qry
@@ -5347,6 +5366,7 @@ module.exports.getClass = async (req, res, next) => {
           allOutcome: 1,
           mostOutcome: 1,
           someOutcome: 1,
+          nextSlot: 1,
           "subjects._id": 1,
           "subjects.name": 1,
           "tutor._id": 1,
