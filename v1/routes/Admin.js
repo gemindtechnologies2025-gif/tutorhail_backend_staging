@@ -119,6 +119,7 @@ router.delete("/deleteClass/:id", Auth.verify("admin"), Controller.AdminControll
 router.get("/classExport", Auth.verify("admin"), Controller.AdminController.classExport);
 router.get("/classDetails", Auth.verify("admin"), Controller.AdminController.classDetails);
 
+
 //Promo Codes
 router.post("/addPromocode", Auth.verify("admin"), Controller.AdminController.addPromoCode);
 router.get("/getPromocode", Auth.verify("admin"), Controller.AdminController.getPromoCode);
