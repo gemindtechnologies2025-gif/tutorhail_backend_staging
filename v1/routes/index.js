@@ -6,9 +6,9 @@ const uploadRoutes=require("./Upload");
 const PaymentRoutes = require("./Payment");
 const services = require("../../services/index");
 
-router.use("/Admin", AdminRoutes);
-router.use("/Parent", ParentRoutes);
-router.use("/Tutor", TutorRoutes);
+router.use("/Admin", services.CryptoEncypt.decryptInput, AdminRoutes);
+router.use("/Parent", services.CryptoEncypt.decryptInput, ParentRoutes);
+router.use("/Tutor", services.CryptoEncypt.decryptInput, TutorRoutes);
 router.use("/Payment", PaymentRoutes);
 router.use("/upload", uploadRoutes);
 

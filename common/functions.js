@@ -3,8 +3,7 @@ const Handlebars = require("handlebars");
 const axios = require('axios');
 const admin = require('firebase-admin');
 
-// Conditionally initialize Firebase only if private key is provided
-if (!admin.apps.length && process.env.FIREBASE_PRIVATE_KEY) {
+if (!admin.apps.length) {
   admin.initializeApp({
       credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
