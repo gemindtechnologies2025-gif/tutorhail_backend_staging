@@ -4916,6 +4916,7 @@ module.exports.classBooking = async (req, res, next) => {
           _id: 1,
           tutorId: 1,
           topic: 1,
+          dyteMeeting: 1,
           classMode: 1,
           address: 1,
           latitude: 1,
