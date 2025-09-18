@@ -9,6 +9,7 @@ const cart = require('../PaymentController/pesapalPayment');
 const mongoose = require("mongoose");
 const ObjectId = mongoose.Types.ObjectId;
 const moment = require('moment');
+const axios = require('axios');
 
 //Social login using google, facebook and apple.
 module.exports.socialLogin = async (req, res, next) => {
@@ -3203,6 +3204,41 @@ module.exports.createClass = async (req, res, next) => {
       req.body.totalFees = req.body.fees;
     }
 
+    // Create Dyte meeting before saving the class
+    let dyteMeeting = null;
+    try {
+      const dyteResponse = await axios.post('https://api.realtime.cloudflare.com/v2/meetings', {
+        title: req.body.topic || 'TutorHail Class',
+        preferred_region: 'ap-south-1',
+        record_on_start: false
+      }, {
+        headers: {
+          'Authorization': 'Basic MTVhMzAyZTgtYTEzMy00NDk1LTlkOWYtZThjODRlYzAwNTUwOjVmNDJmZTY1ZTI1NDA0NDg0MGQ2',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (dyteResponse.data && dyteResponse.data.success) {
+        dyteMeeting = dyteResponse.data;
+        req.body.dyteMeeting = {
+          meetingId: dyteMeeting.data.id,
+          title: dyteMeeting.data.title,
+          preferred_region: dyteMeeting.data.preferred_region,
+          record_on_start: dyteMeeting.data.record_on_start,
+          live_stream_on_start: dyteMeeting.data.live_stream_on_start,
+          persist_chat: dyteMeeting.data.persist_chat,
+          summarize_on_end: dyteMeeting.data.summarize_on_end,
+          is_large: dyteMeeting.data.is_large,
+          status: dyteMeeting.data.status,
+          created_at: dyteMeeting.data.created_at,
+          updated_at: dyteMeeting.data.updated_at
+        };
+      }
+    } catch (dyteError) {
+      console.error('Dyte API error:', dyteError.message);
+      // Continue with class creation even if Dyte fails
+    }
+
     req.body.tutorId = req.user._id;
 
     // Create class
@@ -3356,6 +3392,7 @@ module.exports.getClass = async (req, res, next) => {
           currency: 1,
           classMode: 1,
           usdPrice: 1,
+          dyteMeeting: 1,
           isClassBooked: 1,
           isCoTutor: 1  
         }
@@ -3490,6 +3527,7 @@ module.exports.getClassById = async (req, res, next) => {
         "coTutors.image": 1,
         "coTutors.status": 1, 
         promoCodes: 1,
+        dyteMeeting: 1,
         seats: 1,
         allOutcome: 1,
         mostOutcome: 1,
