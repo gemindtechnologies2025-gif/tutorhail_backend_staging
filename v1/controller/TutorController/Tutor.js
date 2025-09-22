@@ -1889,6 +1889,7 @@ module.exports.getBooking = async (req, res, next) => {
             grandTotal: 1,
             invoiceNo: 1,
             pairingType: 1,
+            dyteMeeting: 1,
             additionalInfo: 1,
             cancelReason: 1,
             cancelledAt: 1,
@@ -1992,6 +1993,7 @@ module.exports.getBooking = async (req, res, next) => {
             createdAt: 1,
             grandTotal: 1,
             invoiceNo: 1,
+            dyteMeeting: 1,
             pairingType: 1,
             cancelReason: 1,
             cancelledAt: 1,
@@ -2110,11 +2112,51 @@ module.exports. pairingOtp = async (req, res, next) => {
     let pairingType;
 
       if (req.body.pairingType === constants.PAIRING_TYPE.START) {
+        // Create Dyte meeting before saving the class
+
+        let dyteMeeting = null;
+    try {
+      const dyteResponse = await axios.post('https://api.realtime.cloudflare.com/v2/meetings', {
+        title: req.body.topic || 'TutorHail Class',
+        preferred_region: 'ap-south-1',
+        record_on_start: false
+      }, {
+        headers: {
+          'Authorization': 'Basic MTVhMzAyZTgtYTEzMy00NDk1LTlkOWYtZThjODRlYzAwNTUwOjVmNDJmZTY1ZTI1NDA0NDg0MGQ2',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (dyteResponse.data && dyteResponse.data.success) {
+        dyteMeeting = dyteResponse.data;
+
+        // Add Dyte meeting information to the class data
+        req.body.dyteMeeting = {
+          meetingId: dyteMeeting.data.id,
+          title: dyteMeeting.data.title,
+          preferred_region: dyteMeeting.data.preferred_region,
+          record_on_start: dyteMeeting.data.record_on_start,
+          live_stream_on_start: dyteMeeting.data.live_stream_on_start,
+          persist_chat: dyteMeeting.data.persist_chat,
+          summarize_on_end: dyteMeeting.data.summarize_on_end,
+          is_large: dyteMeeting.data.is_large,
+          status: dyteMeeting.data.status,
+          created_at: dyteMeeting.data.created_at,
+          updated_at: dyteMeeting.data.updated_at
+        };
+      }
+    } catch (dyteError) {
+      console.error('Dyte API error:', dyteError.message);
+      // Continue with class creation even if Dyte fails
+    }
+
+
         pairingType = constants.PAIRING_TYPE.START;
         await Model.Booking.findOneAndUpdate({
           _id: ObjectId(req.body.bookingId)
         }, {
           $set: {
+            dyteMeeting: req.body.dyteMeeting,
             bookingStatus: constants.BOOKING_STATUS.ACCEPTED,
             acceptedAt: new Date()
           }
@@ -2126,7 +2168,8 @@ module.exports. pairingOtp = async (req, res, next) => {
           bookingId: ObjectId(req.body.bookingId)
         }, {
           $set: {
-            bookingStatus: constants.BOOKING_STATUS.ACCEPTED
+            bookingStatus: constants.BOOKING_STATUS.ACCEPTED,
+            dyteMeeting: req.body.dyteMeeting
           }
         }, {
           new: true
@@ -2271,13 +2314,13 @@ module.exports.verifyPairingOtp = async (req, res, next) => {
         });
          await Model.User.findByIdAndUpdate(
             req.user._id,
-            { $inc: { 
+            { $inc: {
               oneOnOneEarn: status.price + status.transportationFees,
               totalEarn: status.price + status.transportationFees,
               balance: status.price + status.transportationFees
              }}
           );
-        
+
         let remainingBookings = await Model.BookingDetails.findOne({
           bookingId: ObjectId(req.body.bookingId),
           date: {
@@ -2787,7 +2830,7 @@ module.exports.chating = async (req, res, next) => {
           { $set: { isTutorRead: true } }
         );
         process.emit("readMessageCount", {
-          userId: String(req.user._id), 
+          userId: String(req.user._id),
           justReadCount
         });
       }
@@ -2812,7 +2855,7 @@ module.exports.chating = async (req, res, next) => {
           { $set: { isParentRead: true } }
         );
         process.emit("readMessageCount", {
-          userId: String(req.user._id), 
+          userId: String(req.user._id),
           justReadCount
         });
       }
@@ -3284,7 +3327,7 @@ module.exports.createClass = async (req, res, next) => {
         process.emit("sendNotification", {
           tutorId: coTutorId,
           receiverId: coTutorId,
-          values: { 
+          values: {
             classId: newClass._id,
             tutorName: req.user.name,
             className: req.body.topic
@@ -3294,7 +3337,7 @@ module.exports.createClass = async (req, res, next) => {
           pushType: constants.PUSH_TYPE_KEYS.COTUTOR
         });
         process.emit("newClass", {
-          tutorId: coTutorId,       
+          tutorId: coTutorId,
           classId: newClass._id,
           tutorName: req.user.name,
           className: req.body.topic
@@ -3394,7 +3437,7 @@ module.exports.getClass = async (req, res, next) => {
           usdPrice: 1,
           dyteMeeting: 1,
           isClassBooked: 1,
-          isCoTutor: 1  
+          isCoTutor: 1
         }
       });
 
@@ -3501,8 +3544,8 @@ module.exports.getClassById = async (req, res, next) => {
         }
       },{
         $addFields: {
-          isClassBooked: { 
-          $gt: [ { $size: { $ifNull: ["$userBookings", []] } }, 0 ] 
+          isClassBooked: {
+          $gt: [ { $size: { $ifNull: ["$userBookings", []] } }, 0 ]
         }
       }
     },{
@@ -3521,11 +3564,11 @@ module.exports.getClassById = async (req, res, next) => {
         "subjects._id": 1,
         "subjects.name": 1,
         "tutor.name": 1,
-        "coTutors.tutorId": 1,   
+        "coTutors.tutorId": 1,
         "coTutors.name": 1,
         "coTutors.userName": 1,
         "coTutors.image": 1,
-        "coTutors.status": 1, 
+        "coTutors.status": 1,
         promoCodes: 1,
         dyteMeeting: 1,
         seats: 1,
@@ -3576,7 +3619,7 @@ module.exports.updateClass = async (req, res, next) => {
       bookType: constants.BOOK_TYPE.CLASS
     });
     if (classBooked) {
-      throw new Error(constants.MESSAGES[lang].CLASS_ALREADY_BOOKED); 
+      throw new Error(constants.MESSAGES[lang].CLASS_ALREADY_BOOKED);
     }
 
     const { classSlots, promoCodeId, payment, coTutorId = [], ...updateFields } = req.body;
@@ -3704,7 +3747,7 @@ module.exports.updateClass = async (req, res, next) => {
 module.exports.deleteClass = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
-     
+
     const classData = await Model.Classes.findOne({
       _id: ObjectId(req.params.id),
       isDeleted: false
@@ -3717,9 +3760,9 @@ module.exports.deleteClass = async (req, res, next) => {
       bookType: constants.BOOK_TYPE.CLASS
     });
     if (classBooked) {
-      throw new Error(constants.MESSAGES[lang].CLASS_ALREADY_BOOKED); 
+      throw new Error(constants.MESSAGES[lang].CLASS_ALREADY_BOOKED);
     }
-    
+
     const doc = await Model.Classes.findOneAndUpdate(
       { _id: ObjectId(req.params.id) },
       { isDeleted: true },
@@ -4075,7 +4118,7 @@ const getContentAggregationPipeline = ({ matchCondition = {}, userId, sortType, 
       contentType: 1
     }
   });
-  
+
   if (sortType == constants.SORT_TYPE.LATEST) {
     pipeline.push({ $sort: { createdAt: -1 } });
   } else if (sortType == constants.SORT_TYPE.OLDEST) {
@@ -4103,11 +4146,11 @@ module.exports.getContent = async (req, res, next) => {
         { "subjects.name": searchRegex }
       ];
     }
-    
+
     if(req.query.setting){
       match.setting = Number(req.query.setting);
     }
-  
+
     if(req.query.categoryId){
       match.categoryId = ObjectId(req.query.categoryId);
     }
@@ -4531,7 +4574,7 @@ module.exports.getPromoCode = async (req, res, next) => {
     let skip = Number((page - 1) * limit);
     let pipeline = [];
     let qry = {};
-  
+
    if(req.query.setting){
       qry.setting = Number(req.query.setting);
     }
@@ -4543,12 +4586,12 @@ module.exports.getPromoCode = async (req, res, next) => {
         }
       },{
         $lookup: {
-          from: "classes", 
+          from: "classes",
           localField: "classIds",
           foreignField: "_id",
           as: "classes"
         }
-      },{  
+      },{
           $sort: {
             createdAt: -1
         }
@@ -4567,7 +4610,7 @@ module.exports.getPromoCode = async (req, res, next) => {
           allClasses: 1,
           classes: {
             _id: 1,
-            topic: 1 
+            topic: 1
           },
           status: 1,
           updatedAt: 1,
@@ -4592,7 +4635,7 @@ module.exports.getPromoCodeById = async (req, res, next) => {
         }
       },{
         $lookup: {
-          from: "classes", 
+          from: "classes",
           localField: "classIds",
           foreignField: "_id",
           as: "classes"
@@ -4613,7 +4656,7 @@ module.exports.getPromoCodeById = async (req, res, next) => {
           status: 1,
            classes: {
             _id: 1,
-            topic: 1 
+            topic: 1
           },
           createdAt: 1
         }
@@ -4801,7 +4844,7 @@ module.exports.getSocialLinks = async (req, res, next) => {
           tutorId: req.user._id,
           isDeleted: false
         }
-      },{  
+      },{
           $sort: {
             createdAt: -1
         }
@@ -4862,7 +4905,7 @@ module.exports.classBooking = async (req, res, next) => {
       },{
         $unwind: "$classData"
       }];
-    
+
     pipeline.push( {
     $lookup: {
       from: "classcotutors",
@@ -4881,8 +4924,8 @@ module.exports.classBooking = async (req, res, next) => {
   },{
     $match: {
       $or: [
-        { tutorId: req.user._id },            
-        { "coTutorCheck.0": { $exists: true } } 
+        { tutorId: req.user._id },
+        { "coTutorCheck.0": { $exists: true } }
       ]
     }
   });
@@ -4983,7 +5026,7 @@ module.exports.userBook = async (req, res, next) => {
         }
       },{
         $lookup: {
-          from: "users", 
+          from: "users",
           localField: "parentId",
           foreignField: "_id",
           as: "user"
@@ -5196,7 +5239,7 @@ module.exports.viewers = async (req, res, next) => {
     if (req.query.search) {
       const searchRegex = new RegExp(req.query.search.trim(), "i");
       qry.$or = [{
-          "parentId.name": searchRegex 
+          "parentId.name": searchRegex
         }];
       }
     pipeline = await common.pagination(pipeline, skip, limit);
@@ -5327,7 +5370,7 @@ module.exports.getInquiry = async (req, res, next) => {
           path: "$parent",
           preserveNullAndEmptyArrays: true
         }
-      },{  
+      },{
           $sort: {
             createdAt: -1
         }
@@ -5538,7 +5581,7 @@ module.exports.agreeChat = async (req, res, next) => {
   try {
     const lang = req.headers.lang || "en";
     await Validation.Parent.agreeChat.validateAsync(req.body);
-    
+
     let agreeChat = await Model.ChatAgreement.findOne({
       chatId: req.body.chatId
     });
@@ -5550,7 +5593,7 @@ module.exports.agreeChat = async (req, res, next) => {
       agreeChat = await Model.ChatAgreement.create(req.body);
     }
     return res.success(constants.MESSAGES[lang].I_UNDERSTAND, agreeChat);
-   
+
   } catch (error) {
     next(error);
   }
@@ -5568,7 +5611,7 @@ module.exports.subjectList = async (req, res, next) => {
 
     if (req.query.search) {
       const searchRegex = new RegExp(req.query.search.trim(), "i");
-      query.name = searchRegex; 
+      query.name = searchRegex;
     }
 
     const subjects = await Model.Subjects.find(query);
@@ -5736,8 +5779,8 @@ module.exports.coTutorStatus = async (req, res, next) => {
     await Validation.Tutor.coTutorStatus.validateAsync(req.body);
     const classId = ObjectId(req.body.classId);
     const tutorId = req.user._id;
-    const classRequest = await Model.ClassCoTutors.findOne({ 
-      classId: classId, 
+    const classRequest = await Model.ClassCoTutors.findOne({
+      classId: classId,
       tutorId: tutorId,
       status: constants.TUTOR_STATUS.PENDING
      });

@@ -15,10 +15,10 @@ async function generateToken() {
           let config = {
             method: 'post',
             maxBodyLength: Infinity,
-            url: 'https://cybqa.pesapal.com/pesapalv3/api/Auth/RequestToken',
-            headers: { 
-              'Content-Type': 'application/json', 
-              'Accept': 'application/json', 
+            url: 'http://cybqa.pesapal.com/pesapalv3/api/Auth/RequestToken',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
               'Cookie': '__cf_bm=4OCSXO9KSExkLAV7RS7z5BTV_xwX9EgCW2B5v1pVegk-1718256058-1.0.1.1-1JaE6Ia_dV0ustpyQryrupiOxyFaDz4.CnuCQxzsxH7LVEWgXuCkCmjmzJJemAw_NjOfLa2QllLfV6IytflDGA'
             },
             data : data
@@ -33,18 +33,18 @@ async function generateToken() {
 async function generateIPN(token) {
   try {
     let data = JSON.stringify({
-      "url": "https://www.myapplication.com/ipn",
+      "url": "http://www.myapplication.com/ipn",
       "ipn_notification_type": "GET"
     });
-        
+
     let config = {
       method: 'post',
       maxBodyLength: Infinity,
-      url: 'https://cybqa.pesapal.com/pesapalv3/api/URLSetup/RegisterIPN',
-      headers: { 
-        'Accept': 'application/json', 
-        'Content-Type': 'application/json', 
-        'Authorization': token, 
+      url: 'http://cybqa.pesapal.com/pesapalv3/api/URLSetup/RegisterIPN',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': token,
         'Cookie': '__cf_bm=NArTY5VykDEoAWVpPTA7QsCUQ0SPFN937ad1W3jXKVI-1718264162-1.0.1.1-ZMvPSDFr5q2xDo6WtJEFTwKCVO79mfqiDNdRuLzOOUsouBaztTey.lsDf4U.SKrKT2EwdXwLO3dSY4RCQiwtSA'
       },
       data : data
@@ -64,10 +64,10 @@ async function generatePaymentLink(body, user) {
     let callback_url = process.env.CALLBACK_URL;
     let dialCode = user.dialCode.replace('+', '');
     const grandTotal = body.body.grandTotal;
-    
+
     let data = JSON.stringify({
       "id": body.cartId,
-      "currency": "USD",   
+      "currency": "USD",
       "amount": grandTotal,
       "description": "Booking payment for class service",
       "callback_url": callback_url,
@@ -86,25 +86,25 @@ async function generatePaymentLink(body, user) {
         "zip_code": "00100"
       }
     });
-  
+
 
     let config = {
       method: 'post',
       maxBodyLength: Infinity,
-      url: 'https://cybqa.pesapal.com/pesapalv3/api/Transactions/SubmitOrderRequest',
-      headers: { 
-        'Content-Type': 'application/json', 
-        'Authorization': token, 
+      url: 'http://cybqa.pesapal.com/pesapalv3/api/Transactions/SubmitOrderRequest',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token,
         'Cookie': '__cf_bm=4OCSXO9KSExkLAV7RS7z5BTV_xwX9EgCW2B5v1pVegk-1718256058-1.0.1.1-1JaE6Ia_dV0ustpyQryrupiOxyFaDz4.CnuCQxzsxH7LVEWgXuCkCmjmzJJemAw_NjOfLa2QllLfV6IytflDGA'
       },
       data : data
     };
-    
+
     const response = await axios(config);
     return response.data;
     } catch (error) {
         console.log(error, "error");
-    }  
+    }
 }
 
 //Payment
@@ -177,17 +177,17 @@ async function payment(req, res, next) {
 }
 
   async function getPaymentDetail(trackId) {
-    try { 
+    try {
       let token = await generateToken();
       token = token.token;
       let config = {
         method: 'get',
         maxBodyLength: Infinity,
-        url: `https://cybqa.pesapal.com/pesapalv3/api/Transactions/GetTransactionStatus?orderTrackingId=${trackId}`,
-        headers: { 
-          'Accept': 'application/json', 
-          'Content-Type': 'application/json', 
-          'Authorization': token, 
+        url: `http://cybqa.pesapal.com/pesapalv3/api/Transactions/GetTransactionStatus?orderTrackingId=${trackId}`,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': token,
           'Cookie': '__cf_bm=kAES_rhS6_baB4.JJ7MQR9vPRnm.pXr26LKMhwHKU2w-1718184208-1.0.1.1-7nWaNwyhLSJ146VJGCqyFQSyg0U185iLhMfWAzORZKsAgXcl8LCt0F6ThE9hgiDjwO3jD_MXCY4Qfm_vcC2vyg'
         }
       };
@@ -199,7 +199,7 @@ async function payment(req, res, next) {
   }
 
   async function refundPayment(confirmationCode, payment, name) {
-    try {     
+    try {
       let token = await generateToken();
       token = token.token;
 
@@ -212,10 +212,10 @@ async function payment(req, res, next) {
       let config = {
         method: 'post',
         maxBodyLength: Infinity,
-        url: 'https://cybqa.pesapal.com/pesapalv3/api/Transactions/RefundRequest',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Authorization': token, 
+        url: 'http://cybqa.pesapal.com/pesapalv3/api/Transactions/RefundRequest',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token,
           'Cookie': '__cf_bm=MGsM71E8kdFMKRdSZ6dcR2kHteya_giopWXojdYEUbw-1718338863-1.0.1.1-YqRt2fPzetZ_14TWq3jHmNTi9nqkwOzVCzwIUa_N18I6I8PyuqMRR8Uf_tHId3yrMH2f0wm2T_Xu63uo0fFs9g'
         },
         data : data
