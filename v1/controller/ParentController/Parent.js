@@ -5176,6 +5176,7 @@ module.exports.getBookedClasses = async (req, res, next) => {
         classData: {
           _id: 1,
           topic: 1,
+          dyteMeeting: 1,
           address: 1,
           latitude: 1,
           longitude: 1

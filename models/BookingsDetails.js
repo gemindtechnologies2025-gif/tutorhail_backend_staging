@@ -78,7 +78,11 @@ let bookingDetailsModel = new Schema({
     callJoinedByParent: {
         type: Boolean,
         default: false
-    }
+    },
+dyteMeeting: {
+        type: Schema.Types.Mixed,
+        default: null
+    },
 }, {
     timestamps: true,
     toJSON: {

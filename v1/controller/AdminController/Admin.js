@@ -10,6 +10,7 @@ const mongoose = require("mongoose");
 const ObjectId = mongoose.Types.ObjectId;
 const aws = require("aws-sdk");
 const jsonexport = require("jsonexport");
+const axios = require("axios");
 const moment = require('moment');
 const pdf = require("html-pdf-node");
 const fs = require("fs");
@@ -5175,6 +5176,7 @@ module.exports.addClass = async (req, res, next) => {
     await Validation.Tutor.addClass.validateAsync(req.body);
     let { promoCodeId, classSlots, tutorId } = req.body;
     let tutor = await Model.User.findById(tutorId);
+    
     if(Array.isArray(classSlots) && classSlots.length > 0) {
         const slots = classSlots;
         const slotDates = slots.map(slot => new Date(slot.date));
@@ -5182,24 +5184,74 @@ module.exports.addClass = async (req, res, next) => {
         const minDate = new Date(Math.min(...slotDates));
         req.body.lastDate = maxDate;
         req.body.startDate = minDate;
-      }
+    }
+    
     if(req.body.payment == constants.CLASS_PAYMENT.PER_HOUR){
         let hour = req.body.duration / 60;
         req.body.totalFees = req.body.fees * hour;
-      }else if(req.body.payment == constants.CLASS_PAYMENT.SESSION){
+    }else if(req.body.payment == constants.CLASS_PAYMENT.SESSION){
         req.body.totalFees = req.body.fees;
-      }
-    req.body.setting = constants.SETTING.PUBLISH;
-    const newClass = await Model.Classes.create(req.body);
-    if (Array.isArray(promoCodeId) && promoCodeId.length > 0) {
-          for (let i = 0; i < promoCodeId.length; i++) {
-            const promoId = promoCodeId[i];
-            await Model.PromoCode.updateOne(
-              { _id: promoId, tutorId: req.body.tutorId, isDeleted: false },
-              { $addToSet: { classIds: newClass._id } }
-            );
-          }
     }
+    req.body.setting = constants.SETTING.PUBLISH;
+
+    // Create Dyte meeting before saving the class
+    let dyteMeeting = null;
+    try {
+      const dyteResponse = await axios.post('https://api.realtime.cloudflare.com/v2/meetings', {
+        title: req.body.topic || 'TutorHail Class',
+        preferred_region: 'ap-south-1',
+        record_on_start: false
+      }, {
+        headers: {
+          'Authorization': 'Basic MTVhMzAyZTgtYTEzMy00NDk1LTlkOWYtZThjODRlYzAwNTUwOjVmNDJmZTY1ZTI1NDA0NDg0MGQ2',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (dyteResponse.data && dyteResponse.data.success) {
+        dyteMeeting = dyteResponse.data;
+        
+        // Add Dyte meeting information to the class data
+        req.body.dyteMeeting = {
+          meetingId: dyteMeeting.data.id,
+          title: dyteMeeting.data.title,
+          preferred_region: dyteMeeting.data.preferred_region,
+          record_on_start: dyteMeeting.data.record_on_start,
+          live_stream_on_start: dyteMeeting.data.live_stream_on_start,
+          persist_chat: dyteMeeting.data.persist_chat,
+          summarize_on_end: dyteMeeting.data.summarize_on_end,
+          is_large: dyteMeeting.data.is_large,
+          status: dyteMeeting.data.status,
+          created_at: dyteMeeting.data.created_at,
+          updated_at: dyteMeeting.data.updated_at
+        };
+      }
+    } catch (dyteError) {
+      console.error('Dyte API error:', dyteError.message);
+      // Continue with class creation even if Dyte fails
+    }
+
+    const newClass = await Model.Classes.create(req.body);
+    
+    // Update the class with dyteMeeting data if it exists
+    if (req.body.dyteMeeting) {
+      await Model.Classes.updateOne(
+        { _id: newClass._id },
+        { $set: { dyteMeeting: req.body.dyteMeeting } }
+      );
+      newClass.dyteMeeting = req.body.dyteMeeting;
+    }
+    
+    if (Array.isArray(promoCodeId) && promoCodeId.length > 0) {
+      for (let i = 0; i < promoCodeId.length; i++) {
+        const promoId = promoCodeId[i];
+        await Model.PromoCode.updateOne(
+          { _id: promoId, tutorId: req.body.tutorId, isDeleted: false },
+          { $addToSet: { classIds: newClass._id } }
+        );
+      }
+    }
+    
     if (Array.isArray(classSlots) && classSlots.length > 0) {
       const slotsToInsert = classSlots.map(slot => ({
         tutorId: newClass.tutorId,
@@ -5213,38 +5265,45 @@ module.exports.addClass = async (req, res, next) => {
       }));
       await Model.ClassSlots.insertMany(slotsToInsert);
     }
-     if (req.body.coTutorId && Array.isArray(req.body.coTutorId)) {
-           // Save co-tutors in ClassCoTutors collection
-           const coTutorsToInsert = req.body.coTutorId.map(coTutorId => ({
-             classId: newClass._id,
-             tutorId: coTutorId,
-             status: constants.TUTOR_STATUS.PENDING
-           }));
-           await Model.ClassCoTutors.insertMany(coTutorsToInsert);
-     
-           // Send notifications
-           req.body.coTutorId.forEach(coTutorId => {
-             process.emit("sendNotification", {
-               tutorId: coTutorId,
-               receiverId: coTutorId,
-               values: { 
-                 tutorName: tutor.name,
-                 className: req.body.topic
-               },
-               role: constants.ROLE.TUTOR,
-               isNotificationSave: true,
-               pushType: constants.PUSH_TYPE_KEYS.COTUTOR
-             });
-             process.emit("newClass", {
-               tutorId: coTutorId,       
-               classId: newClass._id,
-               tutorName: tutor.name,
-               className: req.body.topic
-             });
-           });
-        }
+    
+    if (req.body.coTutorId && Array.isArray(req.body.coTutorId)) {
+      // Save co-tutors in ClassCoTutors collection
+      const coTutorsToInsert = req.body.coTutorId.map(coTutorId => ({
+        classId: newClass._id,
+        tutorId: coTutorId,
+        status: constants.TUTOR_STATUS.PENDING
+      }));
+      await Model.ClassCoTutors.insertMany(coTutorsToInsert);
 
-    return res.success(constants.MESSAGES[lang].SUCCESS, newClass);
+      // Send notifications
+      req.body.coTutorId.forEach(coTutorId => {
+        process.emit("sendNotification", {
+          tutorId: coTutorId,
+          receiverId: coTutorId,
+          values: { 
+            tutorName: tutor.name,
+            className: req.body.topic
+          },
+          role: constants.ROLE.TUTOR,
+          isNotificationSave: true,
+          pushType: constants.PUSH_TYPE_KEYS.COTUTOR
+        });
+        process.emit("newClass", {
+          tutorId: coTutorId,       
+          classId: newClass._id,
+          tutorName: tutor.name,
+          className: req.body.topic
+        });
+      });
+    }
+
+    // Include dyteMeeting in response if it exists
+    const responseData = newClass.toObject();
+    if (req.body.dyteMeeting) {
+      responseData.dyteMeeting = req.body.dyteMeeting;
+    }
+    
+    return res.success(constants.MESSAGES[lang].SUCCESS, responseData);
   } catch (error) {
     console.error('Error creating class:', error);
     next(error);
@@ -5312,10 +5371,29 @@ module.exports.getClass = async (req, res, next) => {
           as: "userBookings"
         }
       },{
+        $lookup: {
+          from: "classslots",
+          let: { classId: "$_id" },
+          pipeline: [{
+              $match: {
+                $expr: { $eq: ["$classId", "$$classId"] },
+                status: true,
+                date: { $gte: new Date() }  // Only future slots
+              }
+            },
+            {
+              $sort: { date: 1, startTime: 1 }  // Earliest future first
+            },
+            { $limit: 1 }
+          ],
+          as: "nextSlot"
+        }
+      },{
         $addFields: {
           isClassBooked: { 
           $gt: [ { $size: { $ifNull: ["$userBookings", []] } }, 0 ] 
-        }
+        },
+        nextSlot: { $arrayElemAt: ["$nextSlot", 0] }
       }
     },{
         $match: qry
@@ -5347,6 +5425,7 @@ module.exports.getClass = async (req, res, next) => {
           allOutcome: 1,
           mostOutcome: 1,
           someOutcome: 1,
+          nextSlot: 1,
           "subjects._id": 1,
           "subjects.name": 1,
           "tutor._id": 1,
@@ -5355,7 +5434,8 @@ module.exports.getClass = async (req, res, next) => {
           "tutor.dialCode": 1,
           "tutor.phoneNo": 1,
           "tutor.userName": 1,
-          "tutor.image": 1
+          "tutor.image": 1,
+          dyteMeeting: 1
         }
       });
 
@@ -5666,7 +5746,8 @@ module.exports.getClassById = async (req, res, next) => {
           repeatEvery: 1,
           usdPrice: 1,
           currency: 1,
-          endDate: 1
+          endDate: 1,
+          dyteMeeting: 1
         }
       });
     let [classes] = await Model.Classes.aggregate(pipeline);
@@ -5675,6 +5756,40 @@ module.exports.getClassById = async (req, res, next) => {
     next(error);
   }
 };
+
+// Get Class Slots by Class ID
+module.exports.getClassSlots = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+
+    // Check if class exists
+    const classData = await Model.Classes.findOne({
+      _id: ObjectId(req.params.id),
+      isDeleted: false,
+      setting: constants.SETTING.PUBLISH
+    });
+
+    if (!classData) {
+      throw new Error(constants.MESSAGES[lang].CLASS_NOT_FOUND);
+    }
+
+    // Get class slots for the specific class
+    const classSlots = await Model.ClassSlots.find({
+      classId: ObjectId(req.params.id),
+      status: true
+    }).sort({ date: 1, startTime: 1 });
+
+    return res.success(constants.MESSAGES[lang].DATA_FETCHED, {
+      classId: req.params.id,
+      totalSlots: classSlots.length,
+      classslots: classSlots
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 module.exports.deleteClass = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";

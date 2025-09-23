@@ -174,6 +174,10 @@ const classModel = new Schema({
       type:Boolean,
       default:true,
       index: true
+    },
+    dyteMeeting: {
+      type: Schema.Types.Mixed,
+      default: null
     }
 }, {
     timestamps: true
