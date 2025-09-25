@@ -658,6 +658,10 @@ module.exports.verifyOtp = async (req, res, next) => {
       };
       verify = await services.SmsService.verifyOtp(payload);
     }
+    // In staging, accept fixed OTP 1234 for convenience
+    if (process.env.NODE_ENV === "staging" && String(req.body.otp) === "1234") {
+      verify = true;
+    }
     let qry = {
       otp: req.body.otp
     };
@@ -683,12 +687,18 @@ module.exports.verifyOtp = async (req, res, next) => {
     let updatePayload = {};
     let otp = await Model.Otp.findOne(qry);
     if (req.body.email) {
-      if (!otp) {
-        throw new Error(constants.MESSAGES[lang].INVALID_OTP);
-      }
-      verificationType = otp.type;
-      if (otp.email) {
-        updatePayload.email = otp.email;
+      if (process.env.NODE_ENV === "staging" && String(req.body.otp) === "1234") {
+        // Bypass DB OTP check in staging and trust incoming type/email
+        verificationType = Number(req.body.type);
+        updatePayload.email = req.body.email.toLowerCase();
+      } else {
+        if (!otp) {
+          throw new Error(constants.MESSAGES[lang].INVALID_OTP);
+        }
+        verificationType = otp.type;
+        if (otp.email) {
+          updatePayload.email = otp.email;
+        }
       }
     }
 
