@@ -667,16 +667,17 @@ module.exports.verifyOtp = async (req, res, next) => {
     let verify;
     let verificationType = Number(req.body.type);
     if (req.body.dialCode && req.body.phoneNo && req.body.otp) {
-      let payload = {
-        phoneNo: req.body.phoneNo,
-        dialCode: req.body.dialCode,
-        otp: req.body.otp
-      };
-      verify = await services.SmsService.verifyOtp(payload);
-    }
-    // In staging, accept fixed OTP 1234 for convenience
-    if (process.env.NODE_ENV === "staging" && String(req.body.otp) === "1234") {
-      verify = true;
+      if (process.env.NODE_ENV === "staging") {
+        // Do not call Twilio in staging; only accept 1234
+        verify = String(req.body.otp) === "1234";
+      } else {
+        let payload = {
+          phoneNo: req.body.phoneNo,
+          dialCode: req.body.dialCode,
+          otp: req.body.otp
+        };
+        verify = await services.SmsService.verifyOtp(payload);
+      }
     }
     let qry = {
       otp: req.body.otp
