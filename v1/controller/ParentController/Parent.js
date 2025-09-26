@@ -213,19 +213,21 @@ module.exports.signup = async (req, res, next) => {
     //Create a user and check using which verification method user wants to very his/her account.
     let user = await Model.User.create(dataToSave);
     //Send verification code using Sms service or Email service.
-    if (req.body.email) {
-      let payload = {
-        email: req.body.email.toLowerCase(),
-        type: constants.VERIFICATION_TYPE.SIGNUP
-      };
-      services.EmalService.sendEmailVerificationParent(payload);
-    } else if (req.body.phoneNo) {
-      let payload = {
-        dialCode: user.dialCode,
-        phoneNo: user.phoneNo,
-        type: constants.VERIFICATION_TYPE.SIGNUP
-      };
-      services.SmsService.sendPhoneVerification(payload);
+    if (process.env.NODE_ENV !== "staging") {
+      if (req.body.email) {
+        let payload = {
+          email: req.body.email.toLowerCase(),
+          type: constants.VERIFICATION_TYPE.SIGNUP
+        };
+        services.EmalService.sendEmailVerificationParent(payload);
+      } else if (req.body.phoneNo) {
+        let payload = {
+          dialCode: user.dialCode,
+          phoneNo: user.phoneNo,
+          type: constants.VERIFICATION_TYPE.SIGNUP
+        };
+        services.SmsService.sendPhoneVerification(payload);
+      }
     }
     //Decode the password using Bcrypt to ensure secure login.
     if (req.body.password) {
@@ -273,6 +275,10 @@ module.exports.login = async (req, res, next) => {
       if (user) {
         if (user.isBlocked)
           throw new Error(constants.MESSAGES[lang].ACCOUNT_BLOCKED);
+        // In staging: do not send SMS, just acknowledge
+        if (process.env.NODE_ENV === "staging") {
+          return res.success(constants.MESSAGES[lang].VERIFICATION_CODE_SEND);
+        }
         let payload = {
           phoneNo: user.phoneNo,
           dialCode: user.dialCode,
@@ -589,6 +595,10 @@ module.exports.sendOtp = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
     await Validation.User.sendOTP.validateAsync(req.body);
+    // In staging: do not send OTP via SMS/Email; just acknowledge
+    if (process.env.NODE_ENV === "staging") {
+      return res.success(constants.MESSAGES[lang].OTP_SENT);
+    }
     //Send Otp in case of forgot password.
     if (Boolean(req.body.isForget) == true) {
       if (req.body.phoneNo) {
@@ -674,6 +684,12 @@ module.exports.verifyOtp = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
     await Validation.Parent.verifyOTP.validateAsync(req.body);
+    // Staging-only policy: accept ONLY OTP "1234" and reject all others
+    if (process.env.NODE_ENV === "staging") {
+      if (String(req.body.otp) !== "1234") {
+        throw new Error(constants.MESSAGES[lang].INVALID_OTP);
+      }
+    }
     let data = null;
     let message;
     
