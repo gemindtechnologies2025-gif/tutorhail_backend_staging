@@ -164,20 +164,22 @@ module.exports.signup = async (req, res, next) => {
     let user = await Model.User.create(dataToSave);
 
     //Send verification code using Sms service or Email service.
-    if (req.body.email) {
-      let payload = {
-        email: req.body.email.toLowerCase(),
-        name: req.body.firstName ? req.body.firstName : req.body.email,
-        type: constants.VERIFICATION_TYPE.SIGNUP
-      };
-      services.EmalService.sendEmailVerificationTutor(payload);
-    } else if (req.body.phoneNo) {
-      let payload = {
-        dialCode: user.dialCode,
-        phoneNo: user.phoneNo,
-        type: constants.VERIFICATION_TYPE.SIGNUP
-      };
-      services.SmsService.sendPhoneVerification(payload);
+    if (process.env.NODE_ENV !== "staging") {
+      if (req.body.email) {
+        let payload = {
+          email: req.body.email.toLowerCase(),
+          name: req.body.firstName ? req.body.firstName : req.body.email,
+          type: constants.VERIFICATION_TYPE.SIGNUP
+        };
+        services.EmalService.sendEmailVerificationTutor(payload);
+      } else if (req.body.phoneNo) {
+        let payload = {
+          dialCode: user.dialCode,
+          phoneNo: user.phoneNo,
+          type: constants.VERIFICATION_TYPE.SIGNUP
+        };
+        services.SmsService.sendPhoneVerification(payload);
+      }
     }
     //Decode the password using Bcrypt to ensure secure login.
     if (req.body.password) {
@@ -227,6 +229,10 @@ module.exports.login = async (req, res, next) => {
 
       if (user) {
         if (user.isBlocked) throw new Error(constants.MESSAGES[lang].ACCOUNT_BLOCKED);
+        // In staging: do not send SMS, just acknowledge
+        if (process.env.NODE_ENV === "staging") {
+          return res.success(constants.MESSAGES[lang].VERIFICATION_CODE_SEND);
+        }
         let payload = {
           phoneNo: user.phoneNo,
           dialCode: user.dialCode,
@@ -559,6 +565,10 @@ module.exports.sendOtp = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
     await Validation.User.sendOTP.validateAsync(req.body);
+    // In staging: do not send OTP via SMS/Email; just acknowledge
+    if (process.env.NODE_ENV === "staging") {
+      return res.success(constants.MESSAGES[lang].OTP_SENT);
+    }
     //Send Otp in case of forgot password.
     if (Boolean(req.body.isForget) == true) {
       if (req.body.phoneNo) {
@@ -645,18 +655,29 @@ module.exports.verifyOtp = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
     await Validation.Tutor.verifyOTP.validateAsync(req.body);
+    // Staging-only policy: accept ONLY OTP "1234" and reject all others
+    if (process.env.NODE_ENV === "staging") {
+      if (String(req.body.otp) !== "1234") {
+        throw new Error(constants.MESSAGES[lang].INVALID_OTP);
+      }
+    }
     let data = null;
     let message;
 
     let verify;
     let verificationType = Number(req.body.type);
     if (req.body.dialCode && req.body.phoneNo && req.body.otp) {
-      let payload = {
-        phoneNo: req.body.phoneNo,
-        dialCode: req.body.dialCode,
-        otp: req.body.otp
-      };
-      verify = await services.SmsService.verifyOtp(payload);
+      if (process.env.NODE_ENV === "staging") {
+        // Do not call Twilio in staging; only accept 1234
+        verify = String(req.body.otp) === "1234";
+      } else {
+        let payload = {
+          phoneNo: req.body.phoneNo,
+          dialCode: req.body.dialCode,
+          otp: req.body.otp
+        };
+        verify = await services.SmsService.verifyOtp(payload);
+      }
     }
     let qry = {
       otp: req.body.otp
@@ -683,12 +704,18 @@ module.exports.verifyOtp = async (req, res, next) => {
     let updatePayload = {};
     let otp = await Model.Otp.findOne(qry);
     if (req.body.email) {
-      if (!otp) {
-        throw new Error(constants.MESSAGES[lang].INVALID_OTP);
-      }
-      verificationType = otp.type;
-      if (otp.email) {
-        updatePayload.email = otp.email;
+      if (process.env.NODE_ENV === "staging" && String(req.body.otp) === "1234") {
+        // Bypass DB OTP check in staging and trust incoming type/email
+        verificationType = Number(req.body.type);
+        updatePayload.email = req.body.email.toLowerCase();
+      } else {
+        if (!otp) {
+          throw new Error(constants.MESSAGES[lang].INVALID_OTP);
+        }
+        verificationType = otp.type;
+        if (otp.email) {
+          updatePayload.email = otp.email;
+        }
       }
     }
 
