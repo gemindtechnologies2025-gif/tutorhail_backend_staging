@@ -238,7 +238,8 @@ module.exports.setting = Joi.object({
     distanceType: Joi.number().optional(),
     distanceAmount: Joi.number().optional(),
     serviceType: Joi.number().optional(),
-    serviceFees: Joi.number().optional()
+    serviceFees: Joi.number().optional(),
+    countryCode: Joi.string().optional()
 });
 
 module.exports.addPromoCode = Joi.object({
