@@ -203,4 +203,25 @@ module.exports = (io, socket, socketData) => {
       });
     }
   });
+
+  // ------------------- TUTOR STATUS WATCH -------------------
+  socket.on("joinTutorStatusRoom", () => {
+    socket.join("watchTutorStatus");
+  });
+
+  socket.on("leaveTutorStatusRoom", () => {
+    socket.leave("watchTutorStatus");
+  });
+
+  socket.on("updateTutorStatus", async (data) => {
+    try {
+      const tutorId = socketData._id;
+      const isOnline = data?.isOnline ?? false;
+      
+      await Model.User.findByIdAndUpdate(tutorId, { isOnline });
+      io.to("watchTutorStatus").emit("tutorStatusUpdate", { tutorId, isOnline });
+    } catch (error) {
+      console.error(error.message || error);
+    }
+  });
 };
