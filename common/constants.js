@@ -69,6 +69,8 @@ module.exports = {
         DOCUMENT_UPDATED_SUCCESSFULLY: "Document updated successfully",
         DOCUMENT_DELETED_SUCCESSFULLY: "Document deleted successfully",
         DOCUMENT_NOT_FOUND: "Document not found",
+        DOCUMENT_APPROVED_SUCCESSFULLY: "Document approved successfully",
+        DOCUMENT_REJECTED_SUCCESSFULLY: "Document rejected successfully",
         EMAIL_NOT_FOUND: "Email is not registered",
         REMOVED_FROM_WISHLIST: "Remove from wishlist",
         ADDED_TO_WISHLIST: "Added to wishlist",
@@ -416,6 +418,11 @@ module.exports = {
     WITHDRAW_STATUS: {
         PENDING: 1,
         ACCEPTED: 2,
+        REJECTED: 3
+    },
+    DOCUMENT_STATUS: {
+        PENDING: 1,
+        VERIFIED: 2,
         REJECTED: 3
     },
     REFUND_STATUS: {

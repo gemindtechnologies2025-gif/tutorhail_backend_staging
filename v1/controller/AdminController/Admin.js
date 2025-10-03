@@ -2229,6 +2229,9 @@ module.exports.getDocuments = async (req, res, next) => {
     if (req.query.documentType) {
       qry.documentType = Number(req.query.documentType);
     }
+    if (req.query.status) {
+      qry.status = Number(req.query.status);
+    }
     let pipeline = [{
         $match: {
           tutorId: ObjectId(id),
@@ -2238,6 +2241,14 @@ module.exports.getDocuments = async (req, res, next) => {
         $match: qry
       }];
     let document = await Model.RequiredDocuments.aggregate(pipeline);
+    
+    // Handle existing documents without status field
+    document = document.map(doc => ({
+      ...doc,
+      status: doc.status || constants.DOCUMENT_STATUS.PENDING,
+      rejectionReason: doc.rejectionReason || ""
+    }));
+    
     return res.success(constants.MESSAGES[lang].DATA_FETCHED, document);
   } catch (error) {
     next(error);
@@ -2278,6 +2289,60 @@ module.exports.deleteDocuments = async (req, res, next) => {
     });
 
     return res.success(constants.MESSAGES[lang].DOCUMENT_DELETED_SUCCESSFULLY, doc);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.approveDocument = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    
+    const doc = await Model.RequiredDocuments.findOneAndUpdate({
+      _id: ObjectId(req.params.id),
+      isDeleted: false
+    }, {
+      $set: {
+        status: constants.DOCUMENT_STATUS.VERIFIED,
+        rejectionReason: ""
+      }
+    }, {
+      new: true
+    });
+
+    if (!doc) {
+      throw new Error(constants.MESSAGES[lang].DOCUMENT_NOT_FOUND);
+    }
+
+    return res.success(constants.MESSAGES[lang].DOCUMENT_APPROVED_SUCCESSFULLY, doc);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.rejectDocument = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    
+    await Validation.Admin.rejectDocument.validateAsync(req.body);
+    
+    const doc = await Model.RequiredDocuments.findOneAndUpdate({
+      _id: ObjectId(req.params.id),
+      isDeleted: false
+    }, {
+      $set: {
+        status: constants.DOCUMENT_STATUS.REJECTED,
+        rejectionReason: req.body.rejectionReason || ""
+      }
+    }, {
+      new: true
+    });
+
+    if (!doc) {
+      throw new Error(constants.MESSAGES[lang].DOCUMENT_NOT_FOUND);
+    }
+
+    return res.success(constants.MESSAGES[lang].DOCUMENT_REJECTED_SUCCESSFULLY, doc);
   } catch (error) {
     next(error);
   }

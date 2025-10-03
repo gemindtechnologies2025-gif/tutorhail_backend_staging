@@ -75,7 +75,17 @@ const requiredDocumentModel = new Schema({
       onGoing : {
         type: Boolean,
         default: false
-      }
+      },
+    status: {
+        type: Number,
+        enum: Object.values(constants.DOCUMENT_STATUS),
+        default: constants.DOCUMENT_STATUS.PENDING,
+        index: true
+    },
+    rejectionReason: {
+        type: String,
+        default: ""
+    }
 }, {
     timestamps: true,
     toObject: {
