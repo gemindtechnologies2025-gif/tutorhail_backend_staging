@@ -4883,7 +4883,8 @@ module.exports.addSetting = async (req, res, next) => {
     
     const existingSetting = await Model.AppSetting.findOne({
       currency: req.body.currency,
-      countryCode: req.body.countryCode
+      countryCode: req.body.countryCode,
+      isDeleted: false
     });
 
     if (existingSetting) {
@@ -4912,7 +4913,8 @@ module.exports.updateSetting = async (req, res, next) => {
       const existingSetting = await Model.AppSetting.findOne({
         currency: req.body.currency,
         countryCode: req.body.countryCode,
-        _id: { $ne: ObjectId(req.params.id) }
+        _id: { $ne: ObjectId(req.params.id) },
+        isDeleted: false
       });
       if (existingSetting) {
         throw new Error(constants.MESSAGES[lang].SETTING_ALREADY_EXISTS);

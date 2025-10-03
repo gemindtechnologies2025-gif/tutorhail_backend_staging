@@ -102,6 +102,7 @@ module.exports = {
         TUTOR_IS_NOT_ACTIVE: "Tutor is not available now",
         BOOKING_NOT_FOUND : "Invalid booking",
         BOOKING_CANCELLED : "Sorry! Booking no longer available",
+        SERVICE_DATA_NOT_FOUND : "Service for this country not found",
         BOOKING_STARTED: "Booked lesson is already started by tutor",
         TIME_ERROR: "Start time must be less than end time",
         TUTOR_REJECTED: "You can't login, your account is rejected by admin",
