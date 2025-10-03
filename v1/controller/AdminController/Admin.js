@@ -284,6 +284,23 @@ module.exports.addCms = async (req, res, next) => {
       dataObject.refundPolicy = req.body.refundPolicy;
     if (req.body.faq != null && req.body.faq.length != 0)
       dataObject.faq = req.body.faq;
+    if (req.body.dataProcessingAgreement != null && req.body.dataProcessingAgreement != "")
+      dataObject.dataProcessingAgreement = req.body.dataProcessingAgreement;
+    if (req.body.communityGuidelines != null && req.body.communityGuidelines != "")
+      dataObject.communityGuidelines = req.body.communityGuidelines;
+    if (req.body.cookiePolicy != null && req.body.cookiePolicy != "")
+      dataObject.cookiePolicy = req.body.cookiePolicy;
+
+    // Update timestamp fields when content is updated
+    if (dataObject.dataProcessingAgreement) {
+      dataObject.dataProcessingAgreementUpdatedAt = new Date();
+    }
+    if (dataObject.communityGuidelines) {
+      dataObject.communityGuidelinesUpdatedAt = new Date();
+    }
+    if (dataObject.cookiePolicy) {
+      dataObject.cookiePolicyUpdatedAt = new Date();
+    }
 
     addCms = await Model.Cms.findOneAndUpdate({}, dataObject, {
       upsert: true,

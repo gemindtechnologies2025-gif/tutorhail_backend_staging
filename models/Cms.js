@@ -55,7 +55,31 @@ let cmsModel = new Schema({
             type: String,
             default: ""
         }
-    }]
+    }],
+    dataProcessingAgreement: {
+        type: String,
+        default: null
+    },
+    communityGuidelines: {
+        type: String,
+        default: null
+    },
+    cookiePolicy: {
+        type: String,
+        default: null
+    },
+    dataProcessingAgreementUpdatedAt: {
+        type: Date,
+        default: null
+    },
+    communityGuidelinesUpdatedAt: {
+        type: Date,
+        default: null
+    },
+    cookiePolicyUpdatedAt: {
+        type: Date,
+        default: null
+    }
 }, {
     timestamps: true,
     toJSON: {
