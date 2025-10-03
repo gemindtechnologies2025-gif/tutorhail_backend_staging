@@ -2117,8 +2117,11 @@ module.exports.addBooking = async (req, res, next) => {
     }
 
     let calDist = req.body.distance;
-    let setting = await Model.AppSetting.findOne()
-      .select("serviceFees serviceType distanceAmount distanceType");
+    const countryISOCode = req.user?.countryISOCode || 'US';
+    let setting = await Model.AppSetting.findOne({
+      countryCode: countryISOCode,
+      isDeleted: false
+    }).select("serviceFees serviceType distanceAmount distanceType");
 
     let distancePrice = setting.distanceAmount;
     let distanceType = setting.distanceType;
@@ -2739,9 +2742,19 @@ module.exports.bookingDetail = async (req, res, next) => {
 
 //Setting
 module.exports.setting = async (req, res, next) => {
+  let lang = req.headers.lang || "en";
+
+  const countryISOCode = req.user?.countryISOCode || 'US';
+
   try {
-    const setting = await Model.AppSetting.findOne({});
-    return res.success(constants.MESSAGES.DATA_FETCHED, setting);
+    const setting = await Model.AppSetting.findOne({
+      countryCode: countryISOCode,
+      isDeleted: false
+    });
+    if(!setting) {
+      throw new Error(constants.MESSAGES[lang].SERVICE_DATA_NOT_FOUND);
+    }
+    return res.success(constants.MESSAGES[lang].DATA_FETCHED, setting);
   } catch (error) {
     next(error);
   }
@@ -5015,8 +5028,11 @@ module.exports.classBooking = async (req, res, next) => {
     const parentId = req.user._id;
     req.body.parentId = parentId;
     req.body.bookedBy = parentId;
-    const setting = await Model.AppSetting.findOne()
-    .select("serviceFees serviceType");
+    const countryISOCode = req.user?.countryISOCode || 'US';
+    let setting = await Model.AppSetting.findOne({
+      countryCode: countryISOCode,
+      isDeleted: false
+    }).select("serviceFees serviceType distanceAmount distanceType");
     const serviceType = setting.serviceType;
     const servicePrice = setting.serviceFees;
 
