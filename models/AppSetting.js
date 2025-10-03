@@ -13,11 +13,27 @@ let AppSettingModel = new Schema({
     },
     serviceType: {
         type: Number,
-        enum : Object.values(constants.SERVICE_TYPE)
+        enum : Object.values(constants.SERVICE_TYPE),
+        index: true
     },
     serviceFees: {
         type: Number,
         default: 0
+    },
+    countryCode: {
+        type: String,
+        default: "",
+        index: true
+    },
+    currency: {
+        type: String,
+        default: "",
+        index: true
+    },
+    isDeleted: {
+        type: Boolean,
+        default: false,
+        index: true
     }
 }, {
     timestamps: true,

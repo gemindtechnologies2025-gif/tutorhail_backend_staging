@@ -97,7 +97,10 @@ router.post("/addCms", Auth.verify("admin"), Controller.AdminController.addCms);
 router.get("/getCms", Controller.AdminController.getCms);
 
 //Settings
-router.post("/setting", Auth.verify("admin"), Controller.AdminController.setting);
+router.post("/setting", Auth.verify("admin"), Controller.AdminController.addSetting);
+router.put("/setting/:id", Auth.verify("admin"), Controller.AdminController.updateSetting);
+router.get("/setting/:id", Auth.verify("admin"), Controller.AdminController.getSettingById);
+router.delete("/setting/:id", Auth.verify("admin"), Controller.AdminController.deleteSetting);
 router.get("/setting", Auth.verify("admin"), Controller.AdminController.getSetting);
 
 //Refund

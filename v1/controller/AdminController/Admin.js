@@ -4876,16 +4876,22 @@ module.exports.deleteNotification = async (req, res, next) => {
 };
 
 //Setting
-module.exports.setting = async (req, res, next) => {
+module.exports.addSetting = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
     await Validation.Admin.setting.validateAsync(req.body);
-    const setting = await Model.AppSetting.findOneAndUpdate({}, {
-      $set: req.body
-    },{
-      new: true,
-      upsert: true
+    
+    const existingSetting = await Model.AppSetting.findOne({
+      currency: req.body.currency,
+      countryCode: req.body.countryCode
     });
+
+    if (existingSetting) {
+      throw new Error(constants.MESSAGES[lang].SETTING_ALREADY_EXISTS);
+    }
+
+    const setting = await Model.AppSetting.create(req.body);
+
     return res.success(
       constants.MESSAGES[lang].SETTING_CREATED_SUCCESSFULLY,
       setting
@@ -4894,9 +4900,129 @@ module.exports.setting = async (req, res, next) => {
     next(error);
   }
 };
+
+// ✅ Update Setting by ID
+module.exports.updateSetting = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    await Validation.Admin.setting.validateAsync(req.body);
+
+    // Check if currency already exists for a different setting
+    if (req.body.currency) {
+      const existingSetting = await Model.AppSetting.findOne({
+        currency: req.body.currency,
+        countryCode: req.body.countryCode,
+        _id: { $ne: ObjectId(req.params.id) }
+      });
+      if (existingSetting) {
+        throw new Error(constants.MESSAGES[lang].SETTING_ALREADY_EXISTS);
+      }
+    }
+
+    const setting = await Model.AppSetting.findByIdAndUpdate(
+      { _id: ObjectId(req.params.id) },
+      { $set: req.body },
+      { new: true }
+    );
+
+    if (!setting) {
+      return res.notFound(constants.MESSAGES[lang].SETTING_NOT_FOUND);
+    }
+
+    return res.success(
+      constants.MESSAGES[lang].SETTING_UPDATED_SUCCESSFULLY,
+      setting
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ✅ Delete Setting by ID
+module.exports.deleteSetting = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+
+    // 1. Check if setting exists and not already deleted
+    const settingData = await Model.AppSetting.findOne({
+      _id: ObjectId(req.params.id),
+      isDeleted: { $ne: true }
+    });
+
+    if (!settingData) {
+      throw new Error(constants.MESSAGES[lang].SETTING_NOT_FOUND);
+    }
+
+    // 3. Soft delete (set isDeleted = true)
+    const doc = await Model.AppSetting.findOneAndUpdate(
+      { _id: ObjectId(req.params.id) },
+      { isDeleted: true },
+      { new: true }
+    );
+
+    return res.success(constants.MESSAGES[lang].SETTING_DELETED_SUCCESSFULLY, doc);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports.getSetting = async (req, res, next) => {
   try {
-    const setting = await Model.AppSetting.findOne({});
+    let lang = req.headers.lang || "en";
+    let page = req.query.page ? Number(req.query.page) : 1;
+    let limit = req.query.limit ? Number(req.query.limit) : 10;
+    let skip = Number((page - 1) * limit);
+
+    let pipeline = [];
+    let qry = {};
+
+    if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search.trim(), "i");
+      qry.$or = [
+        { currency: searchRegex },
+        { countryCode: searchRegex }
+      ];
+    }
+
+    pipeline.push({
+      $match: {
+        isDeleted: { $ne: true },
+        ...qry
+      }
+    });
+    pipeline.push({
+      $sort: {
+        createdAt: -1
+      }
+    });
+    pipeline.push({
+      $project: {
+        distanceType: 1,
+        distanceAmount: 1,
+        serviceType: 1,
+        serviceFees: 1,
+        currency: 1,
+        countryCode: 1,
+        createdAt: 1
+      }
+    });
+    pipeline = await common.pagination(pipeline, skip, limit);
+    let [settings] = await Model.AppSetting.aggregate(pipeline);
+    return res.success(constants.MESSAGES[lang].DATA_FETCHED, settings);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.getSettingById = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    const setting = await Model.AppSetting.findById(ObjectId(req.params.id));
+
+    if (!setting) {
+      return res.notFound(constants.MESSAGES[lang].SETTING_NOT_FOUND);
+    }
+
     return res.success(constants.MESSAGES.DATA_FETCHED, setting);
   } catch (error) {
     next(error);
