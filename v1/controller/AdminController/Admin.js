@@ -4882,6 +4882,7 @@ module.exports.addSetting = async (req, res, next) => {
     await Validation.Admin.setting.validateAsync(req.body);
     
     const existingSetting = await Model.AppSetting.findOne({
+      currency: req.body.currency,
       countryCode: req.body.countryCode
     });
 
@@ -4906,9 +4907,10 @@ module.exports.updateSetting = async (req, res, next) => {
     let lang = req.headers.lang || "en";
     await Validation.Admin.setting.validateAsync(req.body);
 
-    // Check if countryCode already exists for a different setting
-    if (req.body.countryCode) {
+    // Check if currency already exists for a different setting
+    if (req.body.currency) {
       const existingSetting = await Model.AppSetting.findOne({
+        currency: req.body.currency,
         countryCode: req.body.countryCode,
         _id: { $ne: ObjectId(req.params.id) }
       });
@@ -4977,7 +4979,8 @@ module.exports.getSetting = async (req, res, next) => {
     if (req.query.search) {
       const searchRegex = new RegExp(req.query.search.trim(), "i");
       qry.$or = [
-        { countrycode: searchRegex }
+        { currency: searchRegex },
+        { countryCode: searchRegex }
       ];
     }
 
@@ -4998,7 +5001,8 @@ module.exports.getSetting = async (req, res, next) => {
         distanceAmount: 1,
         serviceType: 1,
         serviceFees: 1,
-        countrycode: 1,
+        currency: 1,
+        countryCode: 1,
         createdAt: 1
       }
     });

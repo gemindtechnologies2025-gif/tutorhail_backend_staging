@@ -239,6 +239,7 @@ module.exports.setting = Joi.object({
     distanceAmount: Joi.number().optional(),
     serviceType: Joi.number().optional(),
     serviceFees: Joi.number().optional(),
+    currency: Joi.string().optional(),
     countryCode: Joi.string().optional()
 });
 

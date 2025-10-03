@@ -25,6 +25,11 @@ let AppSettingModel = new Schema({
         default: "",
         index: true
     },
+    currency: {
+        type: String,
+        default: "",
+        index: true
+    },
     isDeleted: {
         type: Boolean,
         default: false,
