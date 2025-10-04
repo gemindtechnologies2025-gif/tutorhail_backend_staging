@@ -13,6 +13,22 @@ const jsonexport = require("jsonexport");
 const axios = require("axios");
 const moment = require('moment');
 const pdf = require("html-pdf-node");
+
+// Helper function to get document type name
+const getDocumentTypeName = (documentType) => {
+  switch (documentType) {
+    case constants.DOCUMENT_TYPE.ID_PROOF:
+      return "ID Proof";
+    case constants.DOCUMENT_TYPE.ACHIEVEMENTS:
+      return "Achievements";
+    case constants.DOCUMENT_TYPE.CERTIFICATES:
+      return "Certificates";
+    case constants.DOCUMENT_TYPE.VERIFICATION_DOCS:
+      return "Verification Documents";
+    default:
+      return "Document";
+  }
+};
 const fs = require("fs");
 const cart = require('../PaymentController/pesapalPayment');
 
@@ -2308,10 +2324,27 @@ module.exports.approveDocument = async (req, res, next) => {
       }
     }, {
       new: true
-    });
+    }).populate('tutorId', 'name email');
 
     if (!doc) {
       throw new Error(constants.MESSAGES[lang].DOCUMENT_NOT_FOUND);
+    }
+
+    // Send approval email to tutor
+    if (doc.tutorId && doc.tutorId.email) {
+      try {
+        const DocumentEmailService = require('../../../services/DocumentEmailService');
+        await DocumentEmailService.documentApproved({
+          email: doc.tutorId.email,
+          tutorName: doc.tutorId.name,
+          documentType: getDocumentTypeName(doc.documentType),
+          description: doc.description || 'N/A',
+          approvedDate: new Date().toLocaleDateString()
+        });
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        // Don't fail the API if email fails
+      }
     }
 
     return res.success(constants.MESSAGES[lang].DOCUMENT_APPROVED_SUCCESSFULLY, doc);
@@ -2336,10 +2369,28 @@ module.exports.rejectDocument = async (req, res, next) => {
       }
     }, {
       new: true
-    });
+    }).populate('tutorId', 'name email');
 
     if (!doc) {
       throw new Error(constants.MESSAGES[lang].DOCUMENT_NOT_FOUND);
+    }
+
+    // Send rejection email to tutor
+    if (doc.tutorId && doc.tutorId.email) {
+      try {
+        const DocumentEmailService = require('../../../services/DocumentEmailService');
+        await DocumentEmailService.documentRejected({
+          email: doc.tutorId.email,
+          tutorName: doc.tutorId.name,
+          documentType: getDocumentTypeName(doc.documentType),
+          description: doc.description || 'N/A',
+          rejectedDate: new Date().toLocaleDateString(),
+          rejectionReason: doc.rejectionReason
+        });
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        // Don't fail the API if email fails
+      }
     }
 
     return res.success(constants.MESSAGES[lang].DOCUMENT_REJECTED_SUCCESSFULLY, doc);
