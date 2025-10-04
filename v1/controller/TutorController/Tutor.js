@@ -1106,6 +1106,7 @@ module.exports.addDocuments = async (req, res, next) => {
         });
         create.push(updatedDoc);
       } else {
+        req.body.status = constants.DOCUMENT_STATUS.PENDING;
         let result = await Model.RequiredDocuments.create(req.body);
         create.push(result);
 
@@ -1154,6 +1155,9 @@ module.exports.getDocuments = async (req, res, next) => {
     if (req.query.documentType) {
       qry.documentType = Number(req.query.documentType);
     }
+    if (req.query.status) {
+      qry.status = Number(req.query.status);
+    }
 
     let pipeline = [{
         $match: {
@@ -1170,6 +1174,16 @@ module.exports.getDocuments = async (req, res, next) => {
 
     pipeline = await common.pagination(pipeline, skip, limit);
     let [document] = await Model.RequiredDocuments.aggregate(pipeline);
+    
+    // Handle existing documents without status field
+    if (document && document.data) {
+      document.data = document.data.map(doc => ({
+        ...doc,
+        status: doc.status || constants.DOCUMENT_STATUS.PENDING,
+        rejectionReason: doc.rejectionReason || ""
+      }));
+    }
+    
     return res.success(constants.MESSAGES[lang].DATA_FETCHED, {
       document: document.data,
       totalDocuments: document.total
