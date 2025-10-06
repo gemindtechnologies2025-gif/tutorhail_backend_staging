@@ -186,6 +186,10 @@ let bookingModel = new Schema({
             default: ""
         }
     },
+dyteMeeting: {
+        type: Schema.Types.Mixed,
+        default: null
+    },
 }, {
     timestamps: true,
     toJSON: {

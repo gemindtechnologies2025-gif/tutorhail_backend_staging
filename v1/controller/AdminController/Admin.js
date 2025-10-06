@@ -10,8 +10,25 @@ const mongoose = require("mongoose");
 const ObjectId = mongoose.Types.ObjectId;
 const aws = require("aws-sdk");
 const jsonexport = require("jsonexport");
+const axios = require("axios");
 const moment = require('moment');
 const pdf = require("html-pdf-node");
+
+// Helper function to get document type name
+const getDocumentTypeName = (documentType) => {
+  switch (documentType) {
+    case constants.DOCUMENT_TYPE.ID_PROOF:
+      return "ID Proof";
+    case constants.DOCUMENT_TYPE.ACHIEVEMENTS:
+      return "Achievements";
+    case constants.DOCUMENT_TYPE.CERTIFICATES:
+      return "Certificates";
+    case constants.DOCUMENT_TYPE.VERIFICATION_DOCS:
+      return "Verification Documents";
+    default:
+      return "Document";
+  }
+};
 const fs = require("fs");
 const cart = require('../PaymentController/pesapalPayment');
 
@@ -283,6 +300,23 @@ module.exports.addCms = async (req, res, next) => {
       dataObject.refundPolicy = req.body.refundPolicy;
     if (req.body.faq != null && req.body.faq.length != 0)
       dataObject.faq = req.body.faq;
+    if (req.body.dataProcessingAgreement != null && req.body.dataProcessingAgreement != "")
+      dataObject.dataProcessingAgreement = req.body.dataProcessingAgreement;
+    if (req.body.communityGuidelines != null && req.body.communityGuidelines != "")
+      dataObject.communityGuidelines = req.body.communityGuidelines;
+    if (req.body.cookiePolicy != null && req.body.cookiePolicy != "")
+      dataObject.cookiePolicy = req.body.cookiePolicy;
+
+    // Update timestamp fields when content is updated
+    if (dataObject.dataProcessingAgreement) {
+      dataObject.dataProcessingAgreementUpdatedAt = new Date();
+    }
+    if (dataObject.communityGuidelines) {
+      dataObject.communityGuidelinesUpdatedAt = new Date();
+    }
+    if (dataObject.cookiePolicy) {
+      dataObject.cookiePolicyUpdatedAt = new Date();
+    }
 
     addCms = await Model.Cms.findOneAndUpdate({}, dataObject, {
       upsert: true,
@@ -2211,6 +2245,9 @@ module.exports.getDocuments = async (req, res, next) => {
     if (req.query.documentType) {
       qry.documentType = Number(req.query.documentType);
     }
+    if (req.query.status) {
+      qry.status = Number(req.query.status);
+    }
     let pipeline = [{
         $match: {
           tutorId: ObjectId(id),
@@ -2220,6 +2257,14 @@ module.exports.getDocuments = async (req, res, next) => {
         $match: qry
       }];
     let document = await Model.RequiredDocuments.aggregate(pipeline);
+    
+    // Handle existing documents without status field
+    document = document.map(doc => ({
+      ...doc,
+      status: doc.status || constants.DOCUMENT_STATUS.PENDING,
+      rejectionReason: doc.rejectionReason || ""
+    }));
+    
     return res.success(constants.MESSAGES[lang].DATA_FETCHED, document);
   } catch (error) {
     next(error);
@@ -2260,6 +2305,95 @@ module.exports.deleteDocuments = async (req, res, next) => {
     });
 
     return res.success(constants.MESSAGES[lang].DOCUMENT_DELETED_SUCCESSFULLY, doc);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.approveDocument = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    
+    const doc = await Model.RequiredDocuments.findOneAndUpdate({
+      _id: ObjectId(req.params.id),
+      isDeleted: false
+    }, {
+      $set: {
+        status: constants.DOCUMENT_STATUS.VERIFIED,
+        rejectionReason: ""
+      }
+    }, {
+      new: true
+    }).populate('tutorId', 'name email');
+
+    if (!doc) {
+      throw new Error(constants.MESSAGES[lang].DOCUMENT_NOT_FOUND);
+    }
+
+    // Send approval email to tutor
+    if (doc.tutorId && doc.tutorId.email) {
+      try {
+        const DocumentEmailService = require('../../../services/DocumentEmailService');
+        await DocumentEmailService.documentApproved({
+          email: doc.tutorId.email,
+          tutorName: doc.tutorId.name,
+          documentType: getDocumentTypeName(doc.documentType),
+          description: doc.description || 'N/A',
+          approvedDate: new Date().toLocaleDateString()
+        });
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        // Don't fail the API if email fails
+      }
+    }
+
+    return res.success(constants.MESSAGES[lang].DOCUMENT_APPROVED_SUCCESSFULLY, doc);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.rejectDocument = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    
+    await Validation.Admin.rejectDocument.validateAsync(req.body);
+    
+    const doc = await Model.RequiredDocuments.findOneAndUpdate({
+      _id: ObjectId(req.params.id),
+      isDeleted: false
+    }, {
+      $set: {
+        status: constants.DOCUMENT_STATUS.REJECTED,
+        rejectionReason: req.body.rejectionReason || ""
+      }
+    }, {
+      new: true
+    }).populate('tutorId', 'name email');
+
+    if (!doc) {
+      throw new Error(constants.MESSAGES[lang].DOCUMENT_NOT_FOUND);
+    }
+
+    // Send rejection email to tutor
+    if (doc.tutorId && doc.tutorId.email) {
+      try {
+        const DocumentEmailService = require('../../../services/DocumentEmailService');
+        await DocumentEmailService.documentRejected({
+          email: doc.tutorId.email,
+          tutorName: doc.tutorId.name,
+          documentType: getDocumentTypeName(doc.documentType),
+          description: doc.description || 'N/A',
+          rejectedDate: new Date().toLocaleDateString(),
+          rejectionReason: doc.rejectionReason
+        });
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        // Don't fail the API if email fails
+      }
+    }
+
+    return res.success(constants.MESSAGES[lang].DOCUMENT_REJECTED_SUCCESSFULLY, doc);
   } catch (error) {
     next(error);
   }
@@ -4875,16 +5009,23 @@ module.exports.deleteNotification = async (req, res, next) => {
 };
 
 //Setting
-module.exports.setting = async (req, res, next) => {
+module.exports.addSetting = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
     await Validation.Admin.setting.validateAsync(req.body);
-    const setting = await Model.AppSetting.findOneAndUpdate({}, {
-      $set: req.body
-    },{
-      new: true,
-      upsert: true
+    
+    const existingSetting = await Model.AppSetting.findOne({
+      currency: req.body.currency,
+      countryCode: req.body.countryCode,
+      isDeleted: false
     });
+
+    if (existingSetting) {
+      throw new Error(constants.MESSAGES[lang].SETTING_ALREADY_EXISTS);
+    }
+
+    const setting = await Model.AppSetting.create(req.body);
+
     return res.success(
       constants.MESSAGES[lang].SETTING_CREATED_SUCCESSFULLY,
       setting
@@ -4893,9 +5034,130 @@ module.exports.setting = async (req, res, next) => {
     next(error);
   }
 };
+
+// ✅ Update Setting by ID
+module.exports.updateSetting = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    await Validation.Admin.setting.validateAsync(req.body);
+
+    // Check if currency already exists for a different setting
+    if (req.body.currency) {
+      const existingSetting = await Model.AppSetting.findOne({
+        currency: req.body.currency,
+        countryCode: req.body.countryCode,
+        _id: { $ne: ObjectId(req.params.id) },
+        isDeleted: false
+      });
+      if (existingSetting) {
+        throw new Error(constants.MESSAGES[lang].SETTING_ALREADY_EXISTS);
+      }
+    }
+
+    const setting = await Model.AppSetting.findByIdAndUpdate(
+      { _id: ObjectId(req.params.id) },
+      { $set: req.body },
+      { new: true }
+    );
+
+    if (!setting) {
+      return res.notFound(constants.MESSAGES[lang].SETTING_NOT_FOUND);
+    }
+
+    return res.success(
+      constants.MESSAGES[lang].SETTING_UPDATED_SUCCESSFULLY,
+      setting
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ✅ Delete Setting by ID
+module.exports.deleteSetting = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+
+    // 1. Check if setting exists and not already deleted
+    const settingData = await Model.AppSetting.findOne({
+      _id: ObjectId(req.params.id),
+      isDeleted: { $ne: true }
+    });
+
+    if (!settingData) {
+      throw new Error(constants.MESSAGES[lang].SETTING_NOT_FOUND);
+    }
+
+    // 3. Soft delete (set isDeleted = true)
+    const doc = await Model.AppSetting.findOneAndUpdate(
+      { _id: ObjectId(req.params.id) },
+      { isDeleted: true },
+      { new: true }
+    );
+
+    return res.success(constants.MESSAGES[lang].SETTING_DELETED_SUCCESSFULLY, doc);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports.getSetting = async (req, res, next) => {
   try {
-    const setting = await Model.AppSetting.findOne({});
+    let lang = req.headers.lang || "en";
+    let page = req.query.page ? Number(req.query.page) : 1;
+    let limit = req.query.limit ? Number(req.query.limit) : 10;
+    let skip = Number((page - 1) * limit);
+
+    let pipeline = [];
+    let qry = {};
+
+    if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search.trim(), "i");
+      qry.$or = [
+        { currency: searchRegex },
+        { countryCode: searchRegex }
+      ];
+    }
+
+    pipeline.push({
+      $match: {
+        isDeleted: { $ne: true },
+        ...qry
+      }
+    });
+    pipeline.push({
+      $sort: {
+        createdAt: -1
+      }
+    });
+    pipeline.push({
+      $project: {
+        distanceType: 1,
+        distanceAmount: 1,
+        serviceType: 1,
+        serviceFees: 1,
+        currency: 1,
+        countryCode: 1,
+        createdAt: 1
+      }
+    });
+    pipeline = await common.pagination(pipeline, skip, limit);
+    let [settings] = await Model.AppSetting.aggregate(pipeline);
+    return res.success(constants.MESSAGES[lang].DATA_FETCHED, settings);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.getSettingById = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    const setting = await Model.AppSetting.findById(ObjectId(req.params.id));
+
+    if (!setting) {
+      return res.notFound(constants.MESSAGES[lang].SETTING_NOT_FOUND);
+    }
+
     return res.success(constants.MESSAGES.DATA_FETCHED, setting);
   } catch (error) {
     next(error);
@@ -5175,6 +5437,7 @@ module.exports.addClass = async (req, res, next) => {
     await Validation.Tutor.addClass.validateAsync(req.body);
     let { promoCodeId, classSlots, tutorId } = req.body;
     let tutor = await Model.User.findById(tutorId);
+    
     if(Array.isArray(classSlots) && classSlots.length > 0) {
         const slots = classSlots;
         const slotDates = slots.map(slot => new Date(slot.date));
@@ -5182,24 +5445,74 @@ module.exports.addClass = async (req, res, next) => {
         const minDate = new Date(Math.min(...slotDates));
         req.body.lastDate = maxDate;
         req.body.startDate = minDate;
-      }
+    }
+    
     if(req.body.payment == constants.CLASS_PAYMENT.PER_HOUR){
         let hour = req.body.duration / 60;
         req.body.totalFees = req.body.fees * hour;
-      }else if(req.body.payment == constants.CLASS_PAYMENT.SESSION){
+    }else if(req.body.payment == constants.CLASS_PAYMENT.SESSION){
         req.body.totalFees = req.body.fees;
-      }
-    req.body.setting = constants.SETTING.PUBLISH;
-    const newClass = await Model.Classes.create(req.body);
-    if (Array.isArray(promoCodeId) && promoCodeId.length > 0) {
-          for (let i = 0; i < promoCodeId.length; i++) {
-            const promoId = promoCodeId[i];
-            await Model.PromoCode.updateOne(
-              { _id: promoId, tutorId: req.body.tutorId, isDeleted: false },
-              { $addToSet: { classIds: newClass._id } }
-            );
-          }
     }
+    req.body.setting = constants.SETTING.PUBLISH;
+
+    // Create Dyte meeting before saving the class
+    let dyteMeeting = null;
+    try {
+      const dyteResponse = await axios.post('https://api.realtime.cloudflare.com/v2/meetings', {
+        title: req.body.topic || 'TutorHail Class',
+        preferred_region: 'ap-south-1',
+        record_on_start: false
+      }, {
+        headers: {
+          'Authorization': 'Basic MTVhMzAyZTgtYTEzMy00NDk1LTlkOWYtZThjODRlYzAwNTUwOjVmNDJmZTY1ZTI1NDA0NDg0MGQ2',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (dyteResponse.data && dyteResponse.data.success) {
+        dyteMeeting = dyteResponse.data;
+        
+        // Add Dyte meeting information to the class data
+        req.body.dyteMeeting = {
+          meetingId: dyteMeeting.data.id,
+          title: dyteMeeting.data.title,
+          preferred_region: dyteMeeting.data.preferred_region,
+          record_on_start: dyteMeeting.data.record_on_start,
+          live_stream_on_start: dyteMeeting.data.live_stream_on_start,
+          persist_chat: dyteMeeting.data.persist_chat,
+          summarize_on_end: dyteMeeting.data.summarize_on_end,
+          is_large: dyteMeeting.data.is_large,
+          status: dyteMeeting.data.status,
+          created_at: dyteMeeting.data.created_at,
+          updated_at: dyteMeeting.data.updated_at
+        };
+      }
+    } catch (dyteError) {
+      console.error('Dyte API error:', dyteError.message);
+      // Continue with class creation even if Dyte fails
+    }
+
+    const newClass = await Model.Classes.create(req.body);
+    
+    // Update the class with dyteMeeting data if it exists
+    if (req.body.dyteMeeting) {
+      await Model.Classes.updateOne(
+        { _id: newClass._id },
+        { $set: { dyteMeeting: req.body.dyteMeeting } }
+      );
+      newClass.dyteMeeting = req.body.dyteMeeting;
+    }
+    
+    if (Array.isArray(promoCodeId) && promoCodeId.length > 0) {
+      for (let i = 0; i < promoCodeId.length; i++) {
+        const promoId = promoCodeId[i];
+        await Model.PromoCode.updateOne(
+          { _id: promoId, tutorId: req.body.tutorId, isDeleted: false },
+          { $addToSet: { classIds: newClass._id } }
+        );
+      }
+    }
+    
     if (Array.isArray(classSlots) && classSlots.length > 0) {
       const slotsToInsert = classSlots.map(slot => ({
         tutorId: newClass.tutorId,
@@ -5213,38 +5526,45 @@ module.exports.addClass = async (req, res, next) => {
       }));
       await Model.ClassSlots.insertMany(slotsToInsert);
     }
-     if (req.body.coTutorId && Array.isArray(req.body.coTutorId)) {
-           // Save co-tutors in ClassCoTutors collection
-           const coTutorsToInsert = req.body.coTutorId.map(coTutorId => ({
-             classId: newClass._id,
-             tutorId: coTutorId,
-             status: constants.TUTOR_STATUS.PENDING
-           }));
-           await Model.ClassCoTutors.insertMany(coTutorsToInsert);
-     
-           // Send notifications
-           req.body.coTutorId.forEach(coTutorId => {
-             process.emit("sendNotification", {
-               tutorId: coTutorId,
-               receiverId: coTutorId,
-               values: { 
-                 tutorName: tutor.name,
-                 className: req.body.topic
-               },
-               role: constants.ROLE.TUTOR,
-               isNotificationSave: true,
-               pushType: constants.PUSH_TYPE_KEYS.COTUTOR
-             });
-             process.emit("newClass", {
-               tutorId: coTutorId,       
-               classId: newClass._id,
-               tutorName: tutor.name,
-               className: req.body.topic
-             });
-           });
-        }
+    
+    if (req.body.coTutorId && Array.isArray(req.body.coTutorId)) {
+      // Save co-tutors in ClassCoTutors collection
+      const coTutorsToInsert = req.body.coTutorId.map(coTutorId => ({
+        classId: newClass._id,
+        tutorId: coTutorId,
+        status: constants.TUTOR_STATUS.PENDING
+      }));
+      await Model.ClassCoTutors.insertMany(coTutorsToInsert);
 
-    return res.success(constants.MESSAGES[lang].SUCCESS, newClass);
+      // Send notifications
+      req.body.coTutorId.forEach(coTutorId => {
+        process.emit("sendNotification", {
+          tutorId: coTutorId,
+          receiverId: coTutorId,
+          values: { 
+            tutorName: tutor.name,
+            className: req.body.topic
+          },
+          role: constants.ROLE.TUTOR,
+          isNotificationSave: true,
+          pushType: constants.PUSH_TYPE_KEYS.COTUTOR
+        });
+        process.emit("newClass", {
+          tutorId: coTutorId,       
+          classId: newClass._id,
+          tutorName: tutor.name,
+          className: req.body.topic
+        });
+      });
+    }
+
+    // Include dyteMeeting in response if it exists
+    const responseData = newClass.toObject();
+    if (req.body.dyteMeeting) {
+      responseData.dyteMeeting = req.body.dyteMeeting;
+    }
+    
+    return res.success(constants.MESSAGES[lang].SUCCESS, responseData);
   } catch (error) {
     console.error('Error creating class:', error);
     next(error);
@@ -5312,10 +5632,29 @@ module.exports.getClass = async (req, res, next) => {
           as: "userBookings"
         }
       },{
+        $lookup: {
+          from: "classslots",
+          let: { classId: "$_id" },
+          pipeline: [{
+              $match: {
+                $expr: { $eq: ["$classId", "$$classId"] },
+                status: true,
+                date: { $gte: new Date() }  // Only future slots
+              }
+            },
+            {
+              $sort: { date: 1, startTime: 1 }  // Earliest future first
+            },
+            { $limit: 1 }
+          ],
+          as: "nextSlot"
+        }
+      },{
         $addFields: {
           isClassBooked: { 
           $gt: [ { $size: { $ifNull: ["$userBookings", []] } }, 0 ] 
-        }
+        },
+        nextSlot: { $arrayElemAt: ["$nextSlot", 0] }
       }
     },{
         $match: qry
@@ -5347,6 +5686,7 @@ module.exports.getClass = async (req, res, next) => {
           allOutcome: 1,
           mostOutcome: 1,
           someOutcome: 1,
+          nextSlot: 1,
           "subjects._id": 1,
           "subjects.name": 1,
           "tutor._id": 1,
@@ -5355,7 +5695,8 @@ module.exports.getClass = async (req, res, next) => {
           "tutor.dialCode": 1,
           "tutor.phoneNo": 1,
           "tutor.userName": 1,
-          "tutor.image": 1
+          "tutor.image": 1,
+          dyteMeeting: 1
         }
       });
 
@@ -5666,7 +6007,8 @@ module.exports.getClassById = async (req, res, next) => {
           repeatEvery: 1,
           usdPrice: 1,
           currency: 1,
-          endDate: 1
+          endDate: 1,
+          dyteMeeting: 1
         }
       });
     let [classes] = await Model.Classes.aggregate(pipeline);
@@ -5675,6 +6017,40 @@ module.exports.getClassById = async (req, res, next) => {
     next(error);
   }
 };
+
+// Get Class Slots by Class ID
+module.exports.getClassSlots = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+
+    // Check if class exists
+    const classData = await Model.Classes.findOne({
+      _id: ObjectId(req.params.id),
+      isDeleted: false,
+      setting: constants.SETTING.PUBLISH
+    });
+
+    if (!classData) {
+      throw new Error(constants.MESSAGES[lang].CLASS_NOT_FOUND);
+    }
+
+    // Get class slots for the specific class
+    const classSlots = await Model.ClassSlots.find({
+      classId: ObjectId(req.params.id),
+      status: true
+    }).sort({ date: 1, startTime: 1 });
+
+    return res.success(constants.MESSAGES[lang].DATA_FETCHED, {
+      classId: req.params.id,
+      totalSlots: classSlots.length,
+      classslots: classSlots
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 module.exports.deleteClass = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";

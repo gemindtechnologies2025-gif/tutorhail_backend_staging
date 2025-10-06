@@ -52,6 +52,8 @@ router.post("/addDocuments", Auth.verify("admin"), Controller.AdminController.ad
 router.get("/getDocuments/:id", Auth.verify("admin"), Controller.AdminController.getDocuments);
 router.put("/updateDocuments/:id", Auth.verify("admin"), Controller.AdminController.updateDocuments);
 router.delete("/deleteDocuments/:id", Auth.verify("admin"), Controller.AdminController.deleteDocuments);
+router.put("/approveDocument/:id", Auth.verify("admin"), Controller.AdminController.approveDocument);
+router.put("/rejectDocument/:id", Auth.verify("admin"), Controller.AdminController.rejectDocument);
 
 //Tutor - review
 router.get("/tutorReview/:id", Auth.verify("admin"), Controller.AdminController.tutorReview);
@@ -97,7 +99,10 @@ router.post("/addCms", Auth.verify("admin"), Controller.AdminController.addCms);
 router.get("/getCms", Controller.AdminController.getCms);
 
 //Settings
-router.post("/setting", Auth.verify("admin"), Controller.AdminController.setting);
+router.post("/setting", Auth.verify("admin"), Controller.AdminController.addSetting);
+router.put("/setting/:id", Auth.verify("admin"), Controller.AdminController.updateSetting);
+router.get("/setting/:id", Auth.verify("admin"), Controller.AdminController.getSettingById);
+router.delete("/setting/:id", Auth.verify("admin"), Controller.AdminController.deleteSetting);
 router.get("/setting", Auth.verify("admin"), Controller.AdminController.getSetting);
 
 //Refund
@@ -113,10 +118,12 @@ router.get("/tutorList", Auth.verify("admin"), Controller.AdminController.tutorL
 router.post("/addClass", Auth.verify("admin"), Controller.AdminController.addClass);
 router.get("/getClass", Auth.verify("admin"), Controller.AdminController.getClass);
 router.get("/getClass/:id", Auth.verify("admin"), Controller.AdminController.getClassById);
+router.get("/getClassSlots/:id", Auth.verify("admin"), Controller.AdminController.getClassSlots);
 router.put("/updateClass/:id", Auth.verify("admin"), Controller.AdminController.updateClass);
 router.delete("/deleteClass/:id", Auth.verify("admin"), Controller.AdminController.deleteClass);
 router.get("/classExport", Auth.verify("admin"), Controller.AdminController.classExport);
 router.get("/classDetails", Auth.verify("admin"), Controller.AdminController.classDetails);
+
 
 //Promo Codes
 router.post("/addPromocode", Auth.verify("admin"), Controller.AdminController.addPromoCode);

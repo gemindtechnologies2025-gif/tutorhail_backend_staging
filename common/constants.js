@@ -69,6 +69,8 @@ module.exports = {
         DOCUMENT_UPDATED_SUCCESSFULLY: "Document updated successfully",
         DOCUMENT_DELETED_SUCCESSFULLY: "Document deleted successfully",
         DOCUMENT_NOT_FOUND: "Document not found",
+        DOCUMENT_APPROVED_SUCCESSFULLY: "Document approved successfully",
+        DOCUMENT_REJECTED_SUCCESSFULLY: "Document rejected successfully",
         EMAIL_NOT_FOUND: "Email is not registered",
         REMOVED_FROM_WISHLIST: "Remove from wishlist",
         ADDED_TO_WISHLIST: "Added to wishlist",
@@ -89,6 +91,10 @@ module.exports = {
         BOOKING_UPDATED_SUCCESSFULLY: "Booked lesson updated successfully",
         REVIEW_DELETED_SUCCESSFULLY: "Review deleted successfully",
         SETTING_CREATED_SUCCESSFULLY: "Settings created successfully",
+        SETTING_UPDATED_SUCCESSFULLY: "Settings updated successfully",
+        SETTING_DELETED_SUCCESSFULLY: "Settings deleted successfully",
+        SETTING_NOT_FOUND: "Settings not found",    
+        SETTING_ALREADY_EXISTS: "Settings already exists",    
         VERIFICATION_CODE_SEND: "Verification code send on phone",
         TUTOR_DISTANCE: "Tutor distance is very far",
         TUTOR_BOOKING_EXIST: "Your booking already exists.",
@@ -98,6 +104,7 @@ module.exports = {
         TUTOR_IS_NOT_ACTIVE: "Tutor is not available now",
         BOOKING_NOT_FOUND : "Invalid booking",
         BOOKING_CANCELLED : "Sorry! Booking no longer available",
+        SERVICE_DATA_NOT_FOUND : "Service for this country not found",
         BOOKING_STARTED: "Booked lesson is already started by tutor",
         TIME_ERROR: "Start time must be less than end time",
         TUTOR_REJECTED: "You can't login, your account is rejected by admin",
@@ -411,6 +418,11 @@ module.exports = {
     WITHDRAW_STATUS: {
         PENDING: 1,
         ACCEPTED: 2,
+        REJECTED: 3
+    },
+    DOCUMENT_STATUS: {
+        PENDING: 1,
+        VERIFIED: 2,
         REJECTED: 3
     },
     REFUND_STATUS: {

@@ -213,19 +213,21 @@ module.exports.signup = async (req, res, next) => {
     //Create a user and check using which verification method user wants to very his/her account.
     let user = await Model.User.create(dataToSave);
     //Send verification code using Sms service or Email service.
-    if (req.body.email) {
-      let payload = {
-        email: req.body.email.toLowerCase(),
-        type: constants.VERIFICATION_TYPE.SIGNUP
-      };
-      services.EmalService.sendEmailVerificationParent(payload);
-    } else if (req.body.phoneNo) {
-      let payload = {
-        dialCode: user.dialCode,
-        phoneNo: user.phoneNo,
-        type: constants.VERIFICATION_TYPE.SIGNUP
-      };
-      services.SmsService.sendPhoneVerification(payload);
+    if (process.env.NODE_ENV !== "staging") {
+      if (req.body.email) {
+        let payload = {
+          email: req.body.email.toLowerCase(),
+          type: constants.VERIFICATION_TYPE.SIGNUP
+        };
+        services.EmalService.sendEmailVerificationParent(payload);
+      } else if (req.body.phoneNo) {
+        let payload = {
+          dialCode: user.dialCode,
+          phoneNo: user.phoneNo,
+          type: constants.VERIFICATION_TYPE.SIGNUP
+        };
+        services.SmsService.sendPhoneVerification(payload);
+      }
     }
     //Decode the password using Bcrypt to ensure secure login.
     if (req.body.password) {
@@ -273,6 +275,10 @@ module.exports.login = async (req, res, next) => {
       if (user) {
         if (user.isBlocked)
           throw new Error(constants.MESSAGES[lang].ACCOUNT_BLOCKED);
+        // In staging: do not send SMS, just acknowledge
+        if (process.env.NODE_ENV === "staging") {
+          return res.success(constants.MESSAGES[lang].VERIFICATION_CODE_SEND);
+        }
         let payload = {
           phoneNo: user.phoneNo,
           dialCode: user.dialCode,
@@ -589,6 +595,10 @@ module.exports.sendOtp = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
     await Validation.User.sendOTP.validateAsync(req.body);
+    // In staging: do not send OTP via SMS/Email; just acknowledge
+    if (process.env.NODE_ENV === "staging") {
+      return res.success(constants.MESSAGES[lang].OTP_SENT);
+    }
     //Send Otp in case of forgot password.
     if (Boolean(req.body.isForget) == true) {
       if (req.body.phoneNo) {
@@ -674,17 +684,28 @@ module.exports.verifyOtp = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
     await Validation.Parent.verifyOTP.validateAsync(req.body);
+    // Staging-only policy: accept ONLY OTP "1234" and reject all others
+    if (process.env.NODE_ENV === "staging") {
+      if (String(req.body.otp) !== "1234") {
+        throw new Error(constants.MESSAGES[lang].INVALID_OTP);
+      }
+    }
     let data = null;
     let message;
     
     let verify;
     if (req.body.dialCode && req.body.phoneNo && req.body.otp) {
-      let payload = {
-        phoneNo: req.body.phoneNo,
-        dialCode: req.body.dialCode,
-        otp: req.body.otp
-      };
-      verify = await services.SmsService.verifyOtp(payload);
+      if (process.env.NODE_ENV === "staging") {
+        // Do not call Twilio in staging; only accept 1234
+        verify = String(req.body.otp) === "1234";
+      } else {
+        let payload = {
+          phoneNo: req.body.phoneNo,
+          dialCode: req.body.dialCode,
+          otp: req.body.otp
+        };
+        verify = await services.SmsService.verifyOtp(payload);
+      }
     }
 
     let qry = {
@@ -708,12 +729,18 @@ module.exports.verifyOtp = async (req, res, next) => {
     let updatePayload = {};
     let otp = await Model.Otp.findOne(qry);
     if (req.body.email) {
-      if (!otp) {
-        throw new Error(constants.MESSAGES[lang].INVALID_OTP);
-      }
-      verificationType = otp.type;
-      if (otp.email) {
-        updatePayload.email = otp.email;
+      if (process.env.NODE_ENV === "staging" && String(req.body.otp) === "1234") {
+        // Bypass DB OTP check in staging and trust incoming type/email
+        verificationType = Number(req.body.type);
+        updatePayload.email = req.body.email.toLowerCase();
+      } else {
+        if (!otp) {
+          throw new Error(constants.MESSAGES[lang].INVALID_OTP);
+        }
+        verificationType = otp.type;
+        if (otp.email) {
+          updatePayload.email = otp.email;
+        }
       }
     }
     
@@ -1068,6 +1095,7 @@ module.exports.dashBoard = async (req, res, next) => {
           views: 1,
           isActive: 1,
           bannerImg: 1,
+          isOnline: 1,
           classes: 1,
           "teachingdetails.totalTeachingExperience": 1,
           "teachingdetails.price": 1,
@@ -1190,6 +1218,7 @@ module.exports.dashBoard = async (req, res, next) => {
           isFollowing: 1,
           followers: 1,
           views: 1,
+          isOnline: 1,
           isActive: 1,
           bannerImg: 1,
           classes: 1,
@@ -1634,6 +1663,7 @@ module.exports.getTutor = async (req, res, next) => {
           views: 1,
           bookCount: 1,
           isActive: 1,
+          isOnline: 1,
           bannerImg: 1,
           "teachingdetails.startTime": 1,
           "teachingdetails.endTime": 1,
@@ -1874,6 +1904,7 @@ module.exports.tutor = async (req, res, next) => {
           latitude: 1,
           longitude: 1,
           isActive: 1,
+          isOnline: 1,
           isFav: 1,
           bookCount: 1,
           documentVerification: 1,
@@ -2090,8 +2121,11 @@ module.exports.addBooking = async (req, res, next) => {
     }
 
     let calDist = req.body.distance;
-    let setting = await Model.AppSetting.findOne()
-      .select("serviceFees serviceType distanceAmount distanceType");
+    const countryISOCode = req.user?.countryISOCode || 'US';
+    let setting = await Model.AppSetting.findOne({
+      countryCode: countryISOCode,
+      isDeleted: false
+    }).select("serviceFees serviceType distanceAmount distanceType");
 
     let distancePrice = setting.distanceAmount;
     let distanceType = setting.distanceType;
@@ -2470,6 +2504,7 @@ module.exports.getBooking = async (req, res, next) => {
             cancelledAt: 1,
             learnToday: 1,
             classModeOnline: 1,
+            dyteMeeting: 1,
             tutorMoney: 1,
             serviceType: 1,
             serviceCharges: 1,
@@ -2572,6 +2607,7 @@ module.exports.getBooking = async (req, res, next) => {
             bookingStatus: 1,
             parentAddress: 1,
             isRated: 1,
+            dyteMeeting: 1,
             cancelReason: 1,
             cancelledAt: 1,
             refundStatus: 1,
@@ -2710,9 +2746,19 @@ module.exports.bookingDetail = async (req, res, next) => {
 
 //Setting
 module.exports.setting = async (req, res, next) => {
+  let lang = req.headers.lang || "en";
+
+  const countryISOCode = req.user?.countryISOCode || 'US';
+
   try {
-    const setting = await Model.AppSetting.findOne({});
-    return res.success(constants.MESSAGES.DATA_FETCHED, setting);
+    const setting = await Model.AppSetting.findOne({
+      countryCode: countryISOCode,
+      isDeleted: false
+    });
+    if(!setting) {
+      throw new Error(constants.MESSAGES[lang].SERVICE_DATA_NOT_FOUND);
+    }
+    return res.success(constants.MESSAGES[lang].DATA_FETCHED, setting);
   } catch (error) {
     next(error);
   }
@@ -4986,8 +5032,11 @@ module.exports.classBooking = async (req, res, next) => {
     const parentId = req.user._id;
     req.body.parentId = parentId;
     req.body.bookedBy = parentId;
-    const setting = await Model.AppSetting.findOne()
-    .select("serviceFees serviceType");
+    const countryISOCode = req.user?.countryISOCode || 'US';
+    let setting = await Model.AppSetting.findOne({
+      countryCode: countryISOCode,
+      isDeleted: false
+    }).select("serviceFees serviceType distanceAmount distanceType");
     const serviceType = setting.serviceType;
     const servicePrice = setting.serviceFees;
 
@@ -5176,6 +5225,7 @@ module.exports.getBookedClasses = async (req, res, next) => {
         classData: {
           _id: 1,
           topic: 1,
+          dyteMeeting: 1,
           address: 1,
           latitude: 1,
           longitude: 1

@@ -219,6 +219,10 @@ module.exports.updateDocuments = Joi.object({
     longitude: Joi.number().optional()
 });
 
+module.exports.rejectDocument = Joi.object({
+    rejectionReason: Joi.string().optional().allow("")
+});
+
 module.exports.updateWithdrawStatus = Joi.object({
     status: Joi.string().required(),
     ids: Joi.array().required()
@@ -238,7 +242,9 @@ module.exports.setting = Joi.object({
     distanceType: Joi.number().optional(),
     distanceAmount: Joi.number().optional(),
     serviceType: Joi.number().optional(),
-    serviceFees: Joi.number().optional()
+    serviceFees: Joi.number().optional(),
+    currency: Joi.string().optional(),
+    countryCode: Joi.string().optional()
 });
 
 module.exports.addPromoCode = Joi.object({
