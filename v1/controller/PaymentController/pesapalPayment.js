@@ -15,7 +15,7 @@ async function generateToken() {
           let config = {
             method: 'post',
             maxBodyLength: Infinity,
-            url: 'http://cybqa.pesapal.com/pesapalv3/api/Auth/RequestToken',
+            url: 'https://pay.pesapal.com/v3/api/Auth/RequestToken',
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -40,7 +40,7 @@ async function generateIPN(token) {
     let config = {
       method: 'post',
       maxBodyLength: Infinity,
-      url: 'http://cybqa.pesapal.com/pesapalv3/api/URLSetup/RegisterIPN',
+      url: 'https://pay.pesapal.com/v3/api/URLSetup/RegisterIPN',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -91,7 +91,7 @@ async function generatePaymentLink(body, user) {
     let config = {
       method: 'post',
       maxBodyLength: Infinity,
-      url: 'http://cybqa.pesapal.com/pesapalv3/api/Transactions/SubmitOrderRequest',
+      url: 'https://pay.pesapal.com/v3/api/Transactions/SubmitOrderRequest',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': token,
@@ -183,7 +183,7 @@ async function payment(req, res, next) {
       let config = {
         method: 'get',
         maxBodyLength: Infinity,
-        url: `http://cybqa.pesapal.com/pesapalv3/api/Transactions/GetTransactionStatus?orderTrackingId=${trackId}`,
+        url: `https://pay.pesapal.com/v3/api/Transactions/GetTransactionStatus?orderTrackingId=${trackId}`,
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -212,7 +212,7 @@ async function payment(req, res, next) {
       let config = {
         method: 'post',
         maxBodyLength: Infinity,
-        url: 'http://cybqa.pesapal.com/pesapalv3/api/Transactions/RefundRequest',
+        url: 'https://pay.pesapal.com/v3/api/Transactions/RefundRequest',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': token,
