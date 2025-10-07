@@ -42,7 +42,44 @@ async function handleMeetingStarted(payload) {
     const roomName = meeting.roomName;
     const organizedBy = meeting.organizedBy;
     
-    // Update class status to "In Progress"
+    // Find the class to get references
+    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    
+    // 1. Save to MeetingEvents table
+    await Model.MeetingEvents.create({
+      classId: classData?._id || null,
+      tutorId: classData?.tutorId || null,
+      meetingId: meetingId,
+      sessionId: sessionId,
+      roomName: roomName,
+      eventType: 'meeting.started',
+      meetingStatus: 'LIVE',
+      title: title,
+      organizedBy: organizedBy,
+      eventPayload: payload,
+      isProcessed: true
+    });
+
+    // 2. Create or Update MeetingSessions table
+    await Model.MeetingSessions.findOneAndUpdate(
+      { meetingId: meetingId },
+      {
+        $set: {
+          classId: classData?._id,
+          tutorId: classData?.tutorId,
+          sessionId: sessionId,
+          roomName: roomName,
+          title: title,
+          status: 'LIVE',
+          organizedBy: organizedBy,
+          createdAt: new Date(meeting.createdAt),
+          startedAt: new Date(meeting.startedAt)
+        }
+      },
+      { upsert: true, new: true }
+    );
+    
+    // 3. Update class status to "In Progress"
     await Model.Classes.findOneAndUpdate(
       { 'dyteMeeting.meetingId': meetingId },
       { 
@@ -52,12 +89,11 @@ async function handleMeetingStarted(payload) {
           'dyteMeeting.roomName': roomName,
           'dyteMeeting.startedAt': new Date(meeting.startedAt),
           'dyteMeeting.organizedBy': organizedBy
-          // Note: status field is Boolean in schema, not updating it here
         } 
       }
     );
 
-    // Update booking details if exists
+    // 4. Update booking details if exists
     await Model.BookingDetails.findOneAndUpdate(
       { 'dyteMeeting.meetingId': meetingId },
       { 
@@ -71,8 +107,7 @@ async function handleMeetingStarted(payload) {
       }
     );
 
-    // Send notification to class participants
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // 5. Send notification to class participants
     if (classData) {
       process.emit('newNotification', {
         userId: classData.tutorId,
@@ -86,6 +121,19 @@ async function handleMeetingStarted(payload) {
     console.log(`Meeting ${meetingId} started successfully`);
   } catch (error) {
     console.error('Error handling meeting.started:', error);
+    
+    // Save error to MeetingEvents
+    try {
+      await Model.MeetingEvents.create({
+        meetingId: payload.meeting?.id,
+        eventType: 'meeting.started',
+        eventPayload: payload,
+        isProcessed: false,
+        processingError: error.message
+      });
+    } catch (e) {
+      console.error('Failed to save error to MeetingEvents:', e);
+    }
   }
 }
 
@@ -110,7 +158,38 @@ async function handleMeetingEnded(payload) {
       duration = Math.floor((new Date(meeting.endedAt) - new Date(meeting.startedAt)) / 1000);
     }
     
-    // Update class status to "Completed"
+    // Find the class to get references
+    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    
+    // 1. Save to MeetingEvents table
+    await Model.MeetingEvents.create({
+      classId: classData?._id || null,
+      tutorId: classData?.tutorId || null,
+      meetingId: meetingId,
+      sessionId: sessionId,
+      eventType: 'meeting.ended',
+      meetingStatus: 'ENDED',
+      title: title,
+      organizedBy: organizedBy,
+      eventPayload: payload,
+      isProcessed: true
+    });
+
+    // 2. Update MeetingSessions table
+    await Model.MeetingSessions.findOneAndUpdate(
+      { meetingId: meetingId },
+      {
+        $set: {
+          status: 'ENDED',
+          endedAt: new Date(endedAt),
+          duration: duration,
+          endReason: reason,
+          organizedBy: organizedBy
+        }
+      }
+    );
+    
+    // 3. Update class status to "Completed"
     await Model.Classes.findOneAndUpdate(
       { 'dyteMeeting.meetingId': meetingId },
       { 
@@ -120,12 +199,11 @@ async function handleMeetingEnded(payload) {
           'dyteMeeting.duration': duration,
           'dyteMeeting.endReason': reason,
           'dyteMeeting.organizedBy': organizedBy
-          // Note: status field is Boolean in schema, not updating it here
         } 
       }
     );
 
-    // Update booking details if exists
+    // 4. Update booking details if exists
     await Model.BookingDetails.findOneAndUpdate(
       { 'dyteMeeting.meetingId': meetingId },
       { 
@@ -139,8 +217,7 @@ async function handleMeetingEnded(payload) {
       }
     );
 
-    // Send notification to class participants
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // 5. Send notification to class participants
     if (classData) {
       process.emit('newNotification', {
         userId: classData.tutorId,
@@ -154,6 +231,19 @@ async function handleMeetingEnded(payload) {
     console.log(`Meeting ${meetingId} ended successfully. Reason: ${reason}`);
   } catch (error) {
     console.error('Error handling meeting.ended:', error);
+    
+    // Save error to MeetingEvents
+    try {
+      await Model.MeetingEvents.create({
+        meetingId: payload.meeting?.id,
+        eventType: 'meeting.ended',
+        eventPayload: payload,
+        isProcessed: false,
+        processingError: error.message
+      });
+    } catch (e) {
+      console.error('Failed to save error to MeetingEvents:', e);
+    }
   }
 }
 
@@ -174,19 +264,52 @@ async function handleParticipantJoined(payload) {
       joinedAt: new Date(participant.joinedAt)
     };
     
-    // Update participant count in class
+    // Find the class to get references
+    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    
+    // 1. Save to MeetingEvents table
+    await Model.MeetingEvents.create({
+      classId: classData?._id || null,
+      tutorId: classData?.tutorId || null,
+      meetingId: meetingId,
+      sessionId: meeting.sessionId,
+      eventType: 'meeting.participantJoined',
+      meetingStatus: 'LIVE',
+      eventPayload: payload,
+      isProcessed: true
+    });
+
+    // 2. Save to MeetingParticipants table
+    await Model.MeetingParticipants.create({
+      classId: classData?._id,
+      meetingId: meetingId,
+      sessionId: meeting.sessionId,
+      peerId: participant.peerId,
+      userDisplayName: participant.userDisplayName,
+      customParticipantId: participant.customParticipantId,
+      joinedAt: new Date(participant.joinedAt),
+      isCurrentlyInMeeting: true
+    });
+
+    // 3. Update participant count in MeetingSessions
+    await Model.MeetingSessions.findOneAndUpdate(
+      { meetingId: meetingId },
+      { 
+        $inc: { totalParticipants: 1 },
+        $push: { participantList: participantData }
+      }
+    );
+    
+    // 4. Update participant count in class
     await Model.Classes.findOneAndUpdate(
       { 'dyteMeeting.meetingId': meetingId },
       { 
         $inc: { 'dyteMeeting.participantCount': 1 },
-        $push: { 
-          'dyteMeeting.participants': participantData
-        }
+        $push: { 'dyteMeeting.participants': participantData }
       }
     );
 
-    // Send notification to class participants
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // 5. Send notification to class participants
     if (classData) {
       process.emit('newNotification', {
         userId: classData.tutorId,
@@ -221,7 +344,43 @@ async function handleParticipantLeft(payload) {
       leftAt: new Date(participant.leftAt)
     };
     
-    // Update participant count in class
+    // Calculate duration
+    const duration = participant.leftAt && participant.joinedAt 
+      ? Math.floor((new Date(participant.leftAt) - new Date(participant.joinedAt)) / 1000)
+      : 0;
+    
+    // Find the class to get references
+    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    
+    // 1. Save to MeetingEvents table
+    await Model.MeetingEvents.create({
+      classId: classData?._id || null,
+      tutorId: classData?.tutorId || null,
+      meetingId: meetingId,
+      sessionId: meeting.sessionId,
+      eventType: 'meeting.participantLeft',
+      meetingStatus: 'LIVE',
+      eventPayload: payload,
+      isProcessed: true
+    });
+
+    // 2. Update MeetingParticipants table
+    await Model.MeetingParticipants.findOneAndUpdate(
+      { 
+        meetingId: meetingId,
+        peerId: participant.peerId,
+        isCurrentlyInMeeting: true
+      },
+      {
+        $set: {
+          leftAt: new Date(participant.leftAt),
+          duration: duration,
+          isCurrentlyInMeeting: false
+        }
+      }
+    );
+    
+    // 3. Update participant count in class
     await Model.Classes.findOneAndUpdate(
       { 'dyteMeeting.meetingId': meetingId },
       { 
@@ -232,19 +391,18 @@ async function handleParticipantLeft(payload) {
       }
     );
 
-    // Send notification to class participants
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // 4. Send notification to class participants
     if (classData) {
       process.emit('newNotification', {
         userId: classData.tutorId,
         title: 'Student Left',
         message: `${participant.userDisplayName} left the class`,
         type: 'participant_left',
-        data: { meetingId, participant: participantData }
+        data: { meetingId, participant: participantData, duration }
       });
     }
 
-    console.log(`Participant ${participant.userDisplayName} left meeting ${meetingId}`);
+    console.log(`Participant ${participant.userDisplayName} left meeting ${meetingId} (duration: ${duration}s)`);
   } catch (error) {
     console.error('Error handling meeting.participantLeft:', error);
   }

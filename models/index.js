@@ -45,5 +45,8 @@ module.exports = {
     ReportClass: require("./ReportClass"),
     PollOptions: require("./PollOptions"),
     PollVotes: require("./PollVotes"),
-    ClassCoTutors: require("./ClassCoTutors")
+    ClassCoTutors: require("./ClassCoTutors"),
+    MeetingEvents: require("./MeetingEvents"),
+    MeetingSessions: require("./MeetingSessions"),
+    MeetingParticipants: require("./MeetingParticipants")
 }
