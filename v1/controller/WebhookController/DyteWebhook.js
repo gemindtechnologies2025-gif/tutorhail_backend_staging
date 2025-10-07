@@ -51,14 +51,14 @@ async function handleMeetingStarted(payload) {
           'dyteMeeting.sessionId': sessionId,
           'dyteMeeting.roomName': roomName,
           'dyteMeeting.startedAt': new Date(meeting.startedAt),
-          'dyteMeeting.organizedBy': organizedBy,
-          status: constants.CLASS_STATUS.IN_PROGRESS 
+          'dyteMeeting.organizedBy': organizedBy
+          // Note: status field is Boolean in schema, not updating it here
         } 
       }
     );
 
     // Update booking details if exists
-    await Model.BookingsDetails.findOneAndUpdate(
+    await Model.BookingDetails.findOneAndUpdate(
       { 'dyteMeeting.meetingId': meetingId },
       { 
         $set: { 
@@ -119,14 +119,14 @@ async function handleMeetingEnded(payload) {
           'dyteMeeting.endedAt': new Date(endedAt),
           'dyteMeeting.duration': duration,
           'dyteMeeting.endReason': reason,
-          'dyteMeeting.organizedBy': organizedBy,
-          status: constants.CLASS_STATUS.COMPLETED 
+          'dyteMeeting.organizedBy': organizedBy
+          // Note: status field is Boolean in schema, not updating it here
         } 
       }
     );
 
     // Update booking details if exists
-    await Model.BookingsDetails.findOneAndUpdate(
+    await Model.BookingDetails.findOneAndUpdate(
       { 'dyteMeeting.meetingId': meetingId },
       { 
         $set: { 
@@ -280,7 +280,7 @@ async function handleRecordingStatusUpdate(payload) {
     );
 
     // Update booking details if exists
-    await Model.BookingsDetails.findOneAndUpdate(
+    await Model.BookingDetails.findOneAndUpdate(
       { 'dyteMeeting.meetingId': meetingId },
       { 
         $set: { 

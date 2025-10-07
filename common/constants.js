@@ -438,14 +438,6 @@ module.exports = {
         TRANSCRIPT: 'meeting.transcript',
         SUMMARY: 'meeting.summary'
     },
-
-    // Class Status (if not already defined)
-    CLASS_STATUS: {
-        SCHEDULED: 1,
-        IN_PROGRESS: 2,
-        COMPLETED: 3,
-        CANCELLED: 4
-    },
     REFUND_STATUS: {
         ACCEPTED: 1,
         REJECTED: 2
