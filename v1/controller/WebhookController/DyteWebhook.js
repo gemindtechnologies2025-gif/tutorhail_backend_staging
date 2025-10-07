@@ -265,7 +265,27 @@ async function handleParticipantJoined(payload) {
     };
     
     // Find the class to get references
+    console.log(`🔍 Looking for class with meetingId: ${meetingId}`);
+    
     const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    
+    if (!classData) {
+      console.error(`❌ Class NOT found for meeting ${meetingId}`);
+      console.error(`❌ Participant: ${participant.userDisplayName}`);
+      
+      // Try to find ANY class with dyteMeeting to debug
+      const anyClass = await Model.Classes.findOne({ 
+        'dyteMeeting': { $exists: true, $ne: null } 
+      }).limit(1);
+      
+      if (anyClass) {
+        console.log(`📊 Sample class dyteMeeting structure:`, anyClass.dyteMeeting);
+      }
+      
+      console.error(`⚠️  Event will still be logged, but without class/tutor references`);
+    } else {
+      console.log(`✅ Class FOUND! ClassId: ${classData._id}, TutorId: ${classData.tutorId}`);
+    }
     
     // 1. Save to MeetingEvents table
     await Model.MeetingEvents.create({
@@ -281,12 +301,12 @@ async function handleParticipantJoined(payload) {
 
     // 2. Save to MeetingParticipants table
     await Model.MeetingParticipants.create({
-      classId: classData?._id,
+      classId: classData?._id || null,
       meetingId: meetingId,
       sessionId: meeting.sessionId,
       peerId: participant.peerId,
       userDisplayName: participant.userDisplayName,
-      customParticipantId: participant.customParticipantId,
+      customParticipantId: participant.customParticipantId || '',
       joinedAt: new Date(participant.joinedAt),
       isCurrentlyInMeeting: true
     });
@@ -300,16 +320,18 @@ async function handleParticipantJoined(payload) {
       }
     );
     
-    // 4. Update participant count in class
-    await Model.Classes.findOneAndUpdate(
-      { 'dyteMeeting.meetingId': meetingId },
-      { 
-        $inc: { 'dyteMeeting.participantCount': 1 },
-        $push: { 'dyteMeeting.participants': participantData }
-      }
-    );
+    // 4. Update participant count in class (only if class found)
+    if (classData) {
+      await Model.Classes.findOneAndUpdate(
+        { 'dyteMeeting.meetingId': meetingId },
+        { 
+          $inc: { 'dyteMeeting.participantCount': 1 },
+          $push: { 'dyteMeeting.participants': participantData }
+        }
+      );
+    }
 
-    // 5. Send notification to class participants
+    // 5. Send notification to class participants (only if class found)
     if (classData) {
       process.emit('newNotification', {
         userId: classData.tutorId,
@@ -320,9 +342,22 @@ async function handleParticipantJoined(payload) {
       });
     }
 
-    console.log(`Participant ${participant.userDisplayName} joined meeting ${meetingId}`);
+    console.log(`✅ Participant ${participant.userDisplayName} joined meeting ${meetingId}`);
   } catch (error) {
-    console.error('Error handling meeting.participantJoined:', error);
+    console.error('❌ Error handling meeting.participantJoined:', error);
+    
+    // Save error to MeetingEvents
+    try {
+      await Model.MeetingEvents.create({
+        meetingId: payload.meeting?.id,
+        eventType: 'meeting.participantJoined',
+        eventPayload: payload,
+        isProcessed: false,
+        processingError: error.message
+      });
+    } catch (e) {
+      console.error('Failed to save error to MeetingEvents:', e);
+    }
   }
 }
 
@@ -427,29 +462,36 @@ async function handleRecordingStatusUpdate(payload) {
       outputFileName: recording.outputFileName
     };
     
-    // Update class with recording information
-    await Model.Classes.findOneAndUpdate(
-      { 'dyteMeeting.meetingId': meetingId },
+    // Find the class to get references
+    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    
+    // 1. Save to MeetingEvents table (audit log)
+    await Model.MeetingEvents.create({
+      classId: classData?._id || null,
+      tutorId: classData?.tutorId || null,
+      meetingId: meetingId,
+      sessionId: meeting.sessionId,
+      eventType: 'recording.statusUpdate',
+      meetingStatus: meeting.status || 'LIVE',
+      eventPayload: payload,
+      isProcessed: true
+    });
+
+    // 2. Update MeetingSessions table with recording info
+    await Model.MeetingSessions.findOneAndUpdate(
+      { meetingId: meetingId },
       { 
         $set: { 
-          'dyteMeeting.recording': recordingData
+          'recording.id': recording.id,
+          'recording.status': recording.status,
+          'recording.startedTime': new Date(recording.startedTime),
+          'recording.outputFileName': recording.outputFileName
         } 
       }
     );
 
-    // Update booking details if exists
-    await Model.BookingDetails.findOneAndUpdate(
-      { 'dyteMeeting.meetingId': meetingId },
-      { 
-        $set: { 
-          'dyteMeeting.recording': recordingData
-        } 
-      }
-    );
-
-    // Send notification when recording is uploaded
+    // 3. Send notification when recording is uploaded
     if (recording.status === 'UPLOADED') {
-      const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
       if (classData) {
         process.emit('newNotification', {
           userId: classData.tutorId,
@@ -477,16 +519,29 @@ async function handleChatSynced(payload) {
     
     const { meetingId, sessionId, chatDownloadUrl, chatDownloadUrlExpiry, organizedBy } = payload;
     
-    // Update class with chat information
-    await Model.Classes.findOneAndUpdate(
-      { 'dyteMeeting.meetingId': meetingId },
+    // Find the class to get references
+    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    
+    // 1. Save to MeetingEvents table (audit log)
+    await Model.MeetingEvents.create({
+      classId: classData?._id || null,
+      tutorId: classData?.tutorId || null,
+      meetingId: meetingId,
+      sessionId: sessionId,
+      eventType: 'meeting.chatSynced',
+      meetingStatus: 'ENDED',
+      eventPayload: payload,
+      isProcessed: true
+    });
+
+    // 2. Update MeetingSessions table with chat info
+    await Model.MeetingSessions.findOneAndUpdate(
+      { meetingId: meetingId },
       { 
         $set: { 
-          'dyteMeeting.chat': {
-            downloadUrl: chatDownloadUrl,
-            downloadUrlExpiry: new Date(chatDownloadUrlExpiry),
-            syncedAt: new Date()
-          }
+          'chat.downloadUrl': chatDownloadUrl,
+          'chat.downloadUrlExpiry': new Date(chatDownloadUrlExpiry),
+          'chat.syncedAt': new Date()
         } 
       }
     );
@@ -508,22 +563,34 @@ async function handleTranscript(payload) {
     const { meeting, transcriptDownloadUrl, transcriptDownloadUrlExpiry } = payload;
     const meetingId = meeting.id;
     
-    // Update class with transcript information
-    await Model.Classes.findOneAndUpdate(
-      { 'dyteMeeting.meetingId': meetingId },
+    // Find the class to get references
+    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    
+    // 1. Save to MeetingEvents table (audit log)
+    await Model.MeetingEvents.create({
+      classId: classData?._id || null,
+      tutorId: classData?.tutorId || null,
+      meetingId: meetingId,
+      sessionId: meeting.sessionId,
+      eventType: 'meeting.transcript',
+      meetingStatus: 'ENDED',
+      eventPayload: payload,
+      isProcessed: true
+    });
+
+    // 2. Update MeetingSessions table with transcript info
+    await Model.MeetingSessions.findOneAndUpdate(
+      { meetingId: meetingId },
       { 
         $set: { 
-          'dyteMeeting.transcript': {
-            downloadUrl: transcriptDownloadUrl,
-            downloadUrlExpiry: new Date(transcriptDownloadUrlExpiry),
-            availableAt: new Date()
-          }
+          'transcript.downloadUrl': transcriptDownloadUrl,
+          'transcript.downloadUrlExpiry': new Date(transcriptDownloadUrlExpiry),
+          'transcript.availableAt': new Date()
         } 
       }
     );
 
-    // Send notification to class participants
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // 3. Send notification to class participants
     if (classData) {
       process.emit('newNotification', {
         userId: classData.tutorId,
@@ -551,22 +618,34 @@ async function handleSummary(payload) {
     const { meeting, summaryDownloadUrl, summaryDownloadUrlExpiry } = payload;
     const meetingId = meeting.id;
     
-    // Update class with summary information
-    await Model.Classes.findOneAndUpdate(
-      { 'dyteMeeting.meetingId': meetingId },
+    // Find the class to get references
+    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    
+    // 1. Save to MeetingEvents table (audit log)
+    await Model.MeetingEvents.create({
+      classId: classData?._id || null,
+      tutorId: classData?.tutorId || null,
+      meetingId: meetingId,
+      sessionId: meeting.sessionId,
+      eventType: 'meeting.summary',
+      meetingStatus: 'ENDED',
+      eventPayload: payload,
+      isProcessed: true
+    });
+
+    // 2. Update MeetingSessions table with summary info
+    await Model.MeetingSessions.findOneAndUpdate(
+      { meetingId: meetingId },
       { 
         $set: { 
-          'dyteMeeting.summary': {
-            downloadUrl: summaryDownloadUrl,
-            downloadUrlExpiry: new Date(summaryDownloadUrlExpiry),
-            availableAt: new Date()
-          }
+          'summary.downloadUrl': summaryDownloadUrl,
+          'summary.downloadUrlExpiry': new Date(summaryDownloadUrlExpiry),
+          'summary.availableAt': new Date()
         } 
       }
     );
 
-    // Send notification to class participants
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // 3. Send notification to class participants
     if (classData) {
       process.emit('newNotification', {
         userId: classData.tutorId,
@@ -593,16 +672,28 @@ async function handleLivestreamStatusUpdate(payload) {
     
     const { meetingId, streamId, status } = payload;
     
-    // Update class with livestream information
-    await Model.Classes.findOneAndUpdate(
-      { 'dyteMeeting.meetingId': meetingId },
+    // Find the class to get references
+    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    
+    // 1. Save to MeetingEvents table (audit log)
+    await Model.MeetingEvents.create({
+      classId: classData?._id || null,
+      tutorId: classData?.tutorId || null,
+      meetingId: meetingId,
+      eventType: 'livestreaming.statusUpdate',
+      meetingStatus: 'LIVE',
+      eventPayload: payload,
+      isProcessed: true
+    });
+
+    // 2. Update MeetingSessions table with livestream info
+    await Model.MeetingSessions.findOneAndUpdate(
+      { meetingId: meetingId },
       { 
         $set: { 
-          'dyteMeeting.livestream': {
-            streamId: streamId,
-            status: status,
-            updatedAt: new Date()
-          }
+          'livestream.streamId': streamId,
+          'livestream.status': status,
+          'livestream.updatedAt': new Date()
         } 
       }
     );

@@ -7,7 +7,7 @@ const meetingSessionSchema = new Schema({
     classId: {
         type: ObjectId,
         ref: "classes",
-        required: true,
+        default: null,
         index: true
     },
     bookingId: {
@@ -19,7 +19,7 @@ const meetingSessionSchema = new Schema({
     tutorId: {
         type: ObjectId,
         ref: "User",
-        required: true,
+        default: null,
         index: true
     },
     

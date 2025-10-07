@@ -7,7 +7,7 @@ const meetingParticipantSchema = new Schema({
     classId: {
         type: ObjectId,
         ref: "classes",
-        required: true,
+        default: null,
         index: true
     },
     meetingId: {
