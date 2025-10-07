@@ -28,6 +28,71 @@ function verifyDyteSignature(payload, signature, webhookSecret) {
 }
 
 /**
+ * Find class or booking by meeting ID
+ * Searches in both Classes and Bookings collections
+ * @param {string} meetingId - Dyte meeting ID
+ * @returns {Object} - { source: 'class'|'booking', data: classData|bookingData }
+ */
+async function findMeetingSource(meetingId) {
+  try {
+    // First, try to find in Classes collection
+    const classData = await Model.Classes.findOne({ 
+      'dyteMeeting.meetingId': meetingId 
+    });
+    
+    if (classData) {
+      console.log(`✅ Meeting found in CLASSES collection`);
+      console.log(`   ClassId: ${classData._id}, TutorId: ${classData.tutorId}`);
+      return {
+        source: 'class',
+        classId: classData._id,
+        tutorId: classData.tutorId,
+        bookingId: null,
+        data: classData
+      };
+    }
+    
+    // If not found in Classes, try Bookings collection
+    const bookingData = await Model.Booking.findOne({ 
+      'dyteMeeting.meetingId': meetingId 
+    });
+    
+    if (bookingData) {
+      console.log(`✅ Meeting found in BOOKINGS collection`);
+      console.log(`   BookingId: ${bookingData._id}, TutorId: ${bookingData.tutorId}, ParentId: ${bookingData.parentId}`);
+      console.log(`   BookClassId: ${bookingData.bookClassId}`);
+      return {
+        source: 'booking',
+        classId: bookingData.bookClassId || null,  // Use bookClassId, not classId!
+        tutorId: bookingData.tutorId,
+        bookingId: bookingData._id,
+        data: bookingData
+      };
+    }
+    
+    // Not found in either
+    console.error(`❌ Meeting ${meetingId} NOT found in Classes or Bookings`);
+    return {
+      source: null,
+      classId: null,
+      tutorId: null,
+      bookingId: null,
+      data: null
+    };
+    
+  } catch (error) {
+    console.error('Error finding meeting source:', error);
+    return {
+      source: null,
+      classId: null,
+      tutorId: null,
+      bookingId: null,
+      data: null
+    };
+  }
+}
+
+/**
  * Handle meeting.started webhook event
  * @param {Object} payload - Webhook payload
  */
@@ -42,13 +107,15 @@ async function handleMeetingStarted(payload) {
     const roomName = meeting.roomName;
     const organizedBy = meeting.organizedBy;
     
-    // Find the class to get references
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // Find the meeting in Classes or Bookings
+    console.log(`🔍 Searching for meeting ${meetingId} in Classes and Bookings...`);
+    const meetingSource = await findMeetingSource(meetingId);
     
     // 1. Save to MeetingEvents table
     await Model.MeetingEvents.create({
-      classId: classData?._id || null,
-      tutorId: classData?.tutorId || null,
+      classId: meetingSource.classId,
+      bookingId: meetingSource.bookingId,
+      tutorId: meetingSource.tutorId,
       meetingId: meetingId,
       sessionId: sessionId,
       roomName: roomName,
@@ -65,8 +132,9 @@ async function handleMeetingStarted(payload) {
       { meetingId: meetingId },
       {
         $set: {
-          classId: classData?._id,
-          tutorId: classData?.tutorId,
+          classId: meetingSource.classId,
+          bookingId: meetingSource.bookingId,
+          tutorId: meetingSource.tutorId,
           sessionId: sessionId,
           roomName: roomName,
           title: title,
@@ -79,19 +147,34 @@ async function handleMeetingStarted(payload) {
       { upsert: true, new: true }
     );
     
-    // 3. Update class status to "In Progress"
-    await Model.Classes.findOneAndUpdate(
-      { 'dyteMeeting.meetingId': meetingId },
-      { 
-        $set: { 
-          'dyteMeeting.status': 'LIVE',
-          'dyteMeeting.sessionId': sessionId,
-          'dyteMeeting.roomName': roomName,
-          'dyteMeeting.startedAt': new Date(meeting.startedAt),
-          'dyteMeeting.organizedBy': organizedBy
-        } 
-      }
-    );
+    // 3. Update source collection (Classes or Bookings)
+    if (meetingSource.source === 'class') {
+      await Model.Classes.findOneAndUpdate(
+        { 'dyteMeeting.meetingId': meetingId },
+        { 
+          $set: { 
+            'dyteMeeting.status': 'LIVE',
+            'dyteMeeting.sessionId': sessionId,
+            'dyteMeeting.roomName': roomName,
+            'dyteMeeting.startedAt': new Date(meeting.startedAt),
+            'dyteMeeting.organizedBy': organizedBy
+          } 
+        }
+      );
+    } else if (meetingSource.source === 'booking') {
+      await Model.Booking.findOneAndUpdate(
+        { 'dyteMeeting.meetingId': meetingId },
+        { 
+          $set: { 
+            'dyteMeeting.status': 'LIVE',
+            'dyteMeeting.sessionId': sessionId,
+            'dyteMeeting.roomName': roomName,
+            'dyteMeeting.startedAt': new Date(meeting.startedAt),
+            'dyteMeeting.organizedBy': organizedBy
+          } 
+        }
+      );
+    }
 
     // 4. Update booking details if exists
     await Model.BookingDetails.findOneAndUpdate(
@@ -107,20 +190,20 @@ async function handleMeetingStarted(payload) {
       }
     );
 
-    // 5. Send notification to class participants
-    if (classData) {
+    // 5. Send notification to tutor
+    if (meetingSource.tutorId) {
       process.emit('newNotification', {
-        userId: classData.tutorId,
-        title: 'Class Started',
-        message: `Your class "${title}" has started`,
-        type: 'class_started',
-        data: { meetingId, title, sessionId }
+        userId: meetingSource.tutorId,
+        title: 'Meeting Started',
+        message: `Your meeting "${title}" has started`,
+        type: 'meeting_started',
+        data: { meetingId, title, sessionId, source: meetingSource.source }
       });
     }
 
-    console.log(`Meeting ${meetingId} started successfully`);
+    console.log(`✅ Meeting ${meetingId} started successfully (Source: ${meetingSource.source || 'unknown'})`);
   } catch (error) {
-    console.error('Error handling meeting.started:', error);
+    console.error('❌ Error handling meeting.started:', error);
     
     // Save error to MeetingEvents
     try {
@@ -158,13 +241,15 @@ async function handleMeetingEnded(payload) {
       duration = Math.floor((new Date(meeting.endedAt) - new Date(meeting.startedAt)) / 1000);
     }
     
-    // Find the class to get references
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // Find the meeting in Classes or Bookings
+    console.log(`🔍 Searching for meeting ${meetingId} in Classes and Bookings...`);
+    const meetingSource = await findMeetingSource(meetingId);
     
     // 1. Save to MeetingEvents table
     await Model.MeetingEvents.create({
-      classId: classData?._id || null,
-      tutorId: classData?.tutorId || null,
+      classId: meetingSource.classId,
+      bookingId: meetingSource.bookingId,
+      tutorId: meetingSource.tutorId,
       meetingId: meetingId,
       sessionId: sessionId,
       eventType: 'meeting.ended',
@@ -189,19 +274,34 @@ async function handleMeetingEnded(payload) {
       }
     );
     
-    // 3. Update class status to "Completed"
-    await Model.Classes.findOneAndUpdate(
-      { 'dyteMeeting.meetingId': meetingId },
-      { 
-        $set: { 
-          'dyteMeeting.status': 'ENDED',
-          'dyteMeeting.endedAt': new Date(endedAt),
-          'dyteMeeting.duration': duration,
-          'dyteMeeting.endReason': reason,
-          'dyteMeeting.organizedBy': organizedBy
-        } 
-      }
-    );
+    // 3. Update source collection (Classes or Bookings)
+    if (meetingSource.source === 'class') {
+      await Model.Classes.findOneAndUpdate(
+        { 'dyteMeeting.meetingId': meetingId },
+        { 
+          $set: { 
+            'dyteMeeting.status': 'ENDED',
+            'dyteMeeting.endedAt': new Date(endedAt),
+            'dyteMeeting.duration': duration,
+            'dyteMeeting.endReason': reason,
+            'dyteMeeting.organizedBy': organizedBy
+          } 
+        }
+      );
+    } else if (meetingSource.source === 'booking') {
+      await Model.Booking.findOneAndUpdate(
+        { 'dyteMeeting.meetingId': meetingId },
+        { 
+          $set: { 
+            'dyteMeeting.status': 'ENDED',
+            'dyteMeeting.endedAt': new Date(endedAt),
+            'dyteMeeting.duration': duration,
+            'dyteMeeting.endReason': reason,
+            'dyteMeeting.organizedBy': organizedBy
+          } 
+        }
+      );
+    }
 
     // 4. Update booking details if exists
     await Model.BookingDetails.findOneAndUpdate(
@@ -217,20 +317,20 @@ async function handleMeetingEnded(payload) {
       }
     );
 
-    // 5. Send notification to class participants
-    if (classData) {
+    // 5. Send notification to tutor
+    if (meetingSource.tutorId) {
       process.emit('newNotification', {
-        userId: classData.tutorId,
-        title: 'Class Ended',
-        message: `Your class "${title}" has ended`,
-        type: 'class_ended',
-        data: { meetingId, title, duration, reason }
+        userId: meetingSource.tutorId,
+        title: 'Meeting Ended',
+        message: `Your meeting "${title}" has ended`,
+        type: 'meeting_ended',
+        data: { meetingId, title, duration, reason, source: meetingSource.source }
       });
     }
 
-    console.log(`Meeting ${meetingId} ended successfully. Reason: ${reason}`);
+    console.log(`✅ Meeting ${meetingId} ended successfully (Source: ${meetingSource.source || 'unknown'}, Duration: ${duration}s)`);
   } catch (error) {
-    console.error('Error handling meeting.ended:', error);
+    console.error('❌ Error handling meeting.ended:', error);
     
     // Save error to MeetingEvents
     try {
@@ -264,33 +364,15 @@ async function handleParticipantJoined(payload) {
       joinedAt: new Date(participant.joinedAt)
     };
     
-    // Find the class to get references
-    console.log(`🔍 Looking for class with meetingId: ${meetingId}`);
-    
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
-    
-    if (!classData) {
-      console.error(`❌ Class NOT found for meeting ${meetingId}`);
-      console.error(`❌ Participant: ${participant.userDisplayName}`);
-      
-      // Try to find ANY class with dyteMeeting to debug
-      const anyClass = await Model.Classes.findOne({ 
-        'dyteMeeting': { $exists: true, $ne: null } 
-      }).limit(1);
-      
-      if (anyClass) {
-        console.log(`📊 Sample class dyteMeeting structure:`, anyClass.dyteMeeting);
-      }
-      
-      console.error(`⚠️  Event will still be logged, but without class/tutor references`);
-    } else {
-      console.log(`✅ Class FOUND! ClassId: ${classData._id}, TutorId: ${classData.tutorId}`);
-    }
+    // Find the meeting in Classes or Bookings
+    console.log(`🔍 Searching for meeting ${meetingId} in Classes and Bookings...`);
+    const meetingSource = await findMeetingSource(meetingId);
     
     // 1. Save to MeetingEvents table
     await Model.MeetingEvents.create({
-      classId: classData?._id || null,
-      tutorId: classData?.tutorId || null,
+      classId: meetingSource.classId,
+      bookingId: meetingSource.bookingId,
+      tutorId: meetingSource.tutorId,
       meetingId: meetingId,
       sessionId: meeting.sessionId,
       eventType: 'meeting.participantJoined',
@@ -301,7 +383,7 @@ async function handleParticipantJoined(payload) {
 
     // 2. Save to MeetingParticipants table
     await Model.MeetingParticipants.create({
-      classId: classData?._id || null,
+      classId: meetingSource.classId,
       meetingId: meetingId,
       sessionId: meeting.sessionId,
       peerId: participant.peerId,
@@ -320,9 +402,17 @@ async function handleParticipantJoined(payload) {
       }
     );
     
-    // 4. Update participant count in class (only if class found)
-    if (classData) {
+    // 4. Update participant count in source (Classes or Bookings)
+    if (meetingSource.source === 'class') {
       await Model.Classes.findOneAndUpdate(
+        { 'dyteMeeting.meetingId': meetingId },
+        { 
+          $inc: { 'dyteMeeting.participantCount': 1 },
+          $push: { 'dyteMeeting.participants': participantData }
+        }
+      );
+    } else if (meetingSource.source === 'booking') {
+      await Model.Booking.findOneAndUpdate(
         { 'dyteMeeting.meetingId': meetingId },
         { 
           $inc: { 'dyteMeeting.participantCount': 1 },
@@ -331,18 +421,18 @@ async function handleParticipantJoined(payload) {
       );
     }
 
-    // 5. Send notification to class participants (only if class found)
-    if (classData) {
+    // 5. Send notification to tutor
+    if (meetingSource.tutorId) {
       process.emit('newNotification', {
-        userId: classData.tutorId,
-        title: 'Student Joined',
-        message: `${participant.userDisplayName} joined the class`,
+        userId: meetingSource.tutorId,
+        title: 'Participant Joined',
+        message: `${participant.userDisplayName} joined the meeting`,
         type: 'participant_joined',
-        data: { meetingId, participant: participantData }
+        data: { meetingId, participant: participantData, source: meetingSource.source }
       });
     }
 
-    console.log(`✅ Participant ${participant.userDisplayName} joined meeting ${meetingId}`);
+    console.log(`✅ Participant ${participant.userDisplayName} joined meeting ${meetingId} (Source: ${meetingSource.source || 'unknown'})`);
   } catch (error) {
     console.error('❌ Error handling meeting.participantJoined:', error);
     
@@ -384,13 +474,15 @@ async function handleParticipantLeft(payload) {
       ? Math.floor((new Date(participant.leftAt) - new Date(participant.joinedAt)) / 1000)
       : 0;
     
-    // Find the class to get references
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // Find the meeting in Classes or Bookings
+    console.log(`🔍 Searching for meeting ${meetingId} in Classes and Bookings...`);
+    const meetingSource = await findMeetingSource(meetingId);
     
     // 1. Save to MeetingEvents table
     await Model.MeetingEvents.create({
-      classId: classData?._id || null,
-      tutorId: classData?.tutorId || null,
+      classId: meetingSource.classId,
+      bookingId: meetingSource.bookingId,
+      tutorId: meetingSource.tutorId,
       meetingId: meetingId,
       sessionId: meeting.sessionId,
       eventType: 'meeting.participantLeft',
@@ -415,31 +507,39 @@ async function handleParticipantLeft(payload) {
       }
     );
     
-    // 3. Update participant count in class
-    await Model.Classes.findOneAndUpdate(
-      { 'dyteMeeting.meetingId': meetingId },
-      { 
-        $inc: { 'dyteMeeting.participantCount': -1 },
-        $pull: { 
-          'dyteMeeting.participants': { peerId: participant.peerId }
+    // 3. Update participant count in source (Classes or Bookings)
+    if (meetingSource.source === 'class') {
+      await Model.Classes.findOneAndUpdate(
+        { 'dyteMeeting.meetingId': meetingId },
+        { 
+          $inc: { 'dyteMeeting.participantCount': -1 },
+          $pull: { 'dyteMeeting.participants': { peerId: participant.peerId } }
         }
-      }
-    );
+      );
+    } else if (meetingSource.source === 'booking') {
+      await Model.Booking.findOneAndUpdate(
+        { 'dyteMeeting.meetingId': meetingId },
+        { 
+          $inc: { 'dyteMeeting.participantCount': -1 },
+          $pull: { 'dyteMeeting.participants': { peerId: participant.peerId } }
+        }
+      );
+    }
 
-    // 4. Send notification to class participants
-    if (classData) {
+    // 4. Send notification to tutor
+    if (meetingSource.tutorId) {
       process.emit('newNotification', {
-        userId: classData.tutorId,
-        title: 'Student Left',
-        message: `${participant.userDisplayName} left the class`,
+        userId: meetingSource.tutorId,
+        title: 'Participant Left',
+        message: `${participant.userDisplayName} left the meeting`,
         type: 'participant_left',
-        data: { meetingId, participant: participantData, duration }
+        data: { meetingId, participant: participantData, duration, source: meetingSource.source }
       });
     }
 
-    console.log(`Participant ${participant.userDisplayName} left meeting ${meetingId} (duration: ${duration}s)`);
+    console.log(`✅ Participant ${participant.userDisplayName} left meeting ${meetingId} (Duration: ${duration}s, Source: ${meetingSource.source || 'unknown'})`);
   } catch (error) {
-    console.error('Error handling meeting.participantLeft:', error);
+    console.error('❌ Error handling meeting.participantLeft:', error);
   }
 }
 
@@ -462,13 +562,14 @@ async function handleRecordingStatusUpdate(payload) {
       outputFileName: recording.outputFileName
     };
     
-    // Find the class to get references
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // Find the meeting in Classes or Bookings
+    const meetingSource = await findMeetingSource(meetingId);
     
     // 1. Save to MeetingEvents table (audit log)
     await Model.MeetingEvents.create({
-      classId: classData?._id || null,
-      tutorId: classData?.tutorId || null,
+      classId: meetingSource.classId,
+      bookingId: meetingSource.bookingId,
+      tutorId: meetingSource.tutorId,
       meetingId: meetingId,
       sessionId: meeting.sessionId,
       eventType: 'recording.statusUpdate',
@@ -491,21 +592,19 @@ async function handleRecordingStatusUpdate(payload) {
     );
 
     // 3. Send notification when recording is uploaded
-    if (recording.status === 'UPLOADED') {
-      if (classData) {
-        process.emit('newNotification', {
-          userId: classData.tutorId,
-          title: 'Recording Available',
-          message: `Recording for your class is now available`,
-          type: 'recording_uploaded',
-          data: { meetingId, recording: recordingData }
-        });
-      }
+    if (recording.status === 'UPLOADED' && meetingSource.tutorId) {
+      process.emit('newNotification', {
+        userId: meetingSource.tutorId,
+        title: 'Recording Available',
+        message: `Recording for your meeting is now available`,
+        type: 'recording_uploaded',
+        data: { meetingId, recording: recordingData, source: meetingSource.source }
+      });
     }
 
-    console.log(`Recording status updated for meeting ${meetingId}: ${recording.status}`);
+    console.log(`✅ Recording ${recording.status} for meeting ${meetingId} (Source: ${meetingSource.source || 'unknown'})`);
   } catch (error) {
-    console.error('Error handling recording.statusUpdate:', error);
+    console.error('❌ Error handling recording.statusUpdate:', error);
   }
 }
 
@@ -519,13 +618,14 @@ async function handleChatSynced(payload) {
     
     const { meetingId, sessionId, chatDownloadUrl, chatDownloadUrlExpiry, organizedBy } = payload;
     
-    // Find the class to get references
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // Find the meeting in Classes or Bookings
+    const meetingSource = await findMeetingSource(meetingId);
     
     // 1. Save to MeetingEvents table (audit log)
     await Model.MeetingEvents.create({
-      classId: classData?._id || null,
-      tutorId: classData?.tutorId || null,
+      classId: meetingSource.classId,
+      bookingId: meetingSource.bookingId,
+      tutorId: meetingSource.tutorId,
       meetingId: meetingId,
       sessionId: sessionId,
       eventType: 'meeting.chatSynced',
@@ -546,9 +646,9 @@ async function handleChatSynced(payload) {
       }
     );
 
-    console.log(`Chat synced for meeting ${meetingId}`);
+    console.log(`✅ Chat synced for meeting ${meetingId} (Source: ${meetingSource.source || 'unknown'})`);
   } catch (error) {
-    console.error('Error handling meeting.chatSynced:', error);
+    console.error('❌ Error handling meeting.chatSynced:', error);
   }
 }
 
@@ -563,13 +663,14 @@ async function handleTranscript(payload) {
     const { meeting, transcriptDownloadUrl, transcriptDownloadUrlExpiry } = payload;
     const meetingId = meeting.id;
     
-    // Find the class to get references
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // Find the meeting in Classes or Bookings
+    const meetingSource = await findMeetingSource(meetingId);
     
     // 1. Save to MeetingEvents table (audit log)
     await Model.MeetingEvents.create({
-      classId: classData?._id || null,
-      tutorId: classData?.tutorId || null,
+      classId: meetingSource.classId,
+      bookingId: meetingSource.bookingId,
+      tutorId: meetingSource.tutorId,
       meetingId: meetingId,
       sessionId: meeting.sessionId,
       eventType: 'meeting.transcript',
@@ -590,20 +691,20 @@ async function handleTranscript(payload) {
       }
     );
 
-    // 3. Send notification to class participants
-    if (classData) {
+    // 3. Send notification to tutor
+    if (meetingSource.tutorId) {
       process.emit('newNotification', {
-        userId: classData.tutorId,
+        userId: meetingSource.tutorId,
         title: 'Transcript Available',
-        message: `Transcript for your class is now available`,
+        message: `Transcript for your meeting is now available`,
         type: 'transcript_available',
-        data: { meetingId, transcriptDownloadUrl }
+        data: { meetingId, transcriptDownloadUrl, source: meetingSource.source }
       });
     }
 
-    console.log(`Transcript available for meeting ${meetingId}`);
+    console.log(`✅ Transcript available for meeting ${meetingId} (Source: ${meetingSource.source || 'unknown'})`);
   } catch (error) {
-    console.error('Error handling meeting.transcript:', error);
+    console.error('❌ Error handling meeting.transcript:', error);
   }
 }
 
@@ -618,13 +719,14 @@ async function handleSummary(payload) {
     const { meeting, summaryDownloadUrl, summaryDownloadUrlExpiry } = payload;
     const meetingId = meeting.id;
     
-    // Find the class to get references
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // Find the meeting in Classes or Bookings
+    const meetingSource = await findMeetingSource(meetingId);
     
     // 1. Save to MeetingEvents table (audit log)
     await Model.MeetingEvents.create({
-      classId: classData?._id || null,
-      tutorId: classData?.tutorId || null,
+      classId: meetingSource.classId,
+      bookingId: meetingSource.bookingId,
+      tutorId: meetingSource.tutorId,
       meetingId: meetingId,
       sessionId: meeting.sessionId,
       eventType: 'meeting.summary',
@@ -645,20 +747,20 @@ async function handleSummary(payload) {
       }
     );
 
-    // 3. Send notification to class participants
-    if (classData) {
+    // 3. Send notification to tutor
+    if (meetingSource.tutorId) {
       process.emit('newNotification', {
-        userId: classData.tutorId,
+        userId: meetingSource.tutorId,
         title: 'Summary Available',
-        message: `Summary for your class is now available`,
+        message: `Summary for your meeting is now available`,
         type: 'summary_available',
-        data: { meetingId, summaryDownloadUrl }
+        data: { meetingId, summaryDownloadUrl, source: meetingSource.source }
       });
     }
 
-    console.log(`Summary available for meeting ${meetingId}`);
+    console.log(`✅ Summary available for meeting ${meetingId} (Source: ${meetingSource.source || 'unknown'})`);
   } catch (error) {
-    console.error('Error handling meeting.summary:', error);
+    console.error('❌ Error handling meeting.summary:', error);
   }
 }
 
@@ -672,13 +774,14 @@ async function handleLivestreamStatusUpdate(payload) {
     
     const { meetingId, streamId, status } = payload;
     
-    // Find the class to get references
-    const classData = await Model.Classes.findOne({ 'dyteMeeting.meetingId': meetingId });
+    // Find the meeting in Classes or Bookings
+    const meetingSource = await findMeetingSource(meetingId);
     
     // 1. Save to MeetingEvents table (audit log)
     await Model.MeetingEvents.create({
-      classId: classData?._id || null,
-      tutorId: classData?.tutorId || null,
+      classId: meetingSource.classId,
+      bookingId: meetingSource.bookingId,
+      tutorId: meetingSource.tutorId,
       meetingId: meetingId,
       eventType: 'livestreaming.statusUpdate',
       meetingStatus: 'LIVE',
@@ -698,9 +801,9 @@ async function handleLivestreamStatusUpdate(payload) {
       }
     );
 
-    console.log(`Livestream status updated for meeting ${meetingId}: ${status}`);
+    console.log(`✅ Livestream ${status} for meeting ${meetingId} (Source: ${meetingSource.source || 'unknown'})`);
   } catch (error) {
-    console.error('Error handling livestreaming.statusUpdate:', error);
+    console.error('❌ Error handling livestreaming.statusUpdate:', error);
   }
 }
 
