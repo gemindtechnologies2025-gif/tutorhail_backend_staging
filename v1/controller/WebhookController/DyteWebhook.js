@@ -28,12 +28,75 @@ function verifyDyteSignature(payload, signature, webhookSecret) {
 }
 
 /**
- * Find class or booking by meeting ID
+ * Find the matching slot based on meeting start time
+ * @param {string} classId - Class ID
+ * @param {Date} meetingStartTime - Meeting start time
+ * @param {Array} classSlotIds - Array of slot IDs from booking (optional)
+ * @returns {ObjectId} - Slot ID or null
+ */
+async function findMatchingSlot(classId, meetingStartTime, classSlotIds = null) {
+  try {
+    if (!meetingStartTime) {
+      return null;
+    }
+
+    const startTime = new Date(meetingStartTime);
+    let slots = [];
+
+    // If classSlotIds provided (from booking), fetch those specific slots
+    if (classSlotIds && classSlotIds.length > 0) {
+      slots = await Model.ClassSlots.find({
+        _id: { $in: classSlotIds }
+      });
+    } 
+    // Otherwise, find all slots for this class
+    else if (classId) {
+      slots = await Model.ClassSlots.find({
+        classId: classId
+      });
+    }
+
+    if (slots.length === 0) {
+      console.log(`⚠️  No slots found for classId: ${classId}`);
+      return null;
+    }
+
+    // Find the slot with startTime closest to meetingStartTime
+    let closestSlot = null;
+    let minDifference = Infinity;
+
+    for (const slot of slots) {
+      const slotStart = new Date(slot.startTime);
+      const difference = Math.abs(slotStart - startTime);
+      
+      if (difference < minDifference) {
+        minDifference = difference;
+        closestSlot = slot;
+      }
+    }
+
+    // Only consider it a match if within 30 minutes
+    if (closestSlot && minDifference < 30 * 60 * 1000) {
+      console.log(`✅ Found matching slot: ${closestSlot._id} (difference: ${Math.floor(minDifference / 1000)}s)`);
+      return closestSlot._id;
+    }
+
+    console.log(`⚠️  No slot found within 30 minutes of meeting start time`);
+    return null;
+  } catch (error) {
+    console.error('Error finding matching slot:', error);
+    return null;
+  }
+}
+
+/**
+ * Find class or booking by meeting ID and also find the matching slot
  * Searches in both Classes and Bookings collections
  * @param {string} meetingId - Dyte meeting ID
- * @returns {Object} - { source: 'class'|'booking', data: classData|bookingData }
+ * @param {Date} meetingStartTime - Meeting start time (optional, for slot matching)
+ * @returns {Object} - { source: 'class'|'booking', classId, slotId, tutorId, bookingId, data }
  */
-async function findMeetingSource(meetingId) {
+async function findMeetingSource(meetingId, meetingStartTime = null) {
   try {
     // First, try to find in Classes collection
     const classData = await Model.Classes.findOne({ 
@@ -43,9 +106,14 @@ async function findMeetingSource(meetingId) {
     if (classData) {
       console.log(`✅ Meeting found in CLASSES collection`);
       console.log(`   ClassId: ${classData._id}, TutorId: ${classData.tutorId}`);
+      
+      // Find matching slot for this class
+      const slotId = await findMatchingSlot(classData._id, meetingStartTime, null);
+      
       return {
         source: 'class',
         classId: classData._id,
+        slotId: slotId,
         tutorId: classData.tutorId,
         bookingId: null,
         data: classData
@@ -61,9 +129,18 @@ async function findMeetingSource(meetingId) {
       console.log(`✅ Meeting found in BOOKINGS collection`);
       console.log(`   BookingId: ${bookingData._id}, TutorId: ${bookingData.tutorId}, ParentId: ${bookingData.parentId}`);
       console.log(`   BookClassId: ${bookingData.bookClassId}`);
+      
+      // Find matching slot from booking's classSlotIds
+      const slotId = await findMatchingSlot(
+        bookingData.bookClassId, 
+        meetingStartTime, 
+        bookingData.classSlotIds
+      );
+      
       return {
         source: 'booking',
         classId: bookingData.bookClassId || null,  // Use bookClassId, not classId!
+        slotId: slotId,
         tutorId: bookingData.tutorId,
         bookingId: bookingData._id,
         data: bookingData
@@ -75,6 +152,7 @@ async function findMeetingSource(meetingId) {
     return {
       source: null,
       classId: null,
+      slotId: null,
       tutorId: null,
       bookingId: null,
       data: null
@@ -85,6 +163,7 @@ async function findMeetingSource(meetingId) {
     return {
       source: null,
       classId: null,
+      slotId: null,
       tutorId: null,
       bookingId: null,
       data: null
@@ -109,11 +188,12 @@ async function handleMeetingStarted(payload) {
     
     // Find the meeting in Classes or Bookings
     console.log(`🔍 Searching for meeting ${meetingId} in Classes and Bookings...`);
-    const meetingSource = await findMeetingSource(meetingId);
+    const meetingSource = await findMeetingSource(meetingId, meeting.startedAt);
     
     // 1. Save to MeetingEvents table
     await Model.MeetingEvents.create({
       classId: meetingSource.classId,
+      slotId: meetingSource.slotId,
       bookingId: meetingSource.bookingId,
       tutorId: meetingSource.tutorId,
       meetingId: meetingId,
@@ -133,6 +213,7 @@ async function handleMeetingStarted(payload) {
       {
         $set: {
           classId: meetingSource.classId,
+          slotId: meetingSource.slotId,
           bookingId: meetingSource.bookingId,
           tutorId: meetingSource.tutorId,
           sessionId: sessionId,
@@ -243,11 +324,12 @@ async function handleMeetingEnded(payload) {
     
     // Find the meeting in Classes or Bookings
     console.log(`🔍 Searching for meeting ${meetingId} in Classes and Bookings...`);
-    const meetingSource = await findMeetingSource(meetingId);
+    const meetingSource = await findMeetingSource(meetingId, meeting.startedAt);
     
     // 1. Save to MeetingEvents table
     await Model.MeetingEvents.create({
       classId: meetingSource.classId,
+      slotId: meetingSource.slotId,
       bookingId: meetingSource.bookingId,
       tutorId: meetingSource.tutorId,
       meetingId: meetingId,
@@ -366,11 +448,12 @@ async function handleParticipantJoined(payload) {
     
     // Find the meeting in Classes or Bookings
     console.log(`🔍 Searching for meeting ${meetingId} in Classes and Bookings...`);
-    const meetingSource = await findMeetingSource(meetingId);
+    const meetingSource = await findMeetingSource(meetingId, participant.joinedAt);
     
     // 1. Save to MeetingEvents table
     await Model.MeetingEvents.create({
       classId: meetingSource.classId,
+      slotId: meetingSource.slotId,
       bookingId: meetingSource.bookingId,
       tutorId: meetingSource.tutorId,
       meetingId: meetingId,
@@ -384,6 +467,7 @@ async function handleParticipantJoined(payload) {
     // 2. Save to MeetingParticipants table
     await Model.MeetingParticipants.create({
       classId: meetingSource.classId,
+      slotId: meetingSource.slotId,
       meetingId: meetingId,
       sessionId: meeting.sessionId,
       peerId: participant.peerId,
@@ -476,11 +560,12 @@ async function handleParticipantLeft(payload) {
     
     // Find the meeting in Classes or Bookings
     console.log(`🔍 Searching for meeting ${meetingId} in Classes and Bookings...`);
-    const meetingSource = await findMeetingSource(meetingId);
+    const meetingSource = await findMeetingSource(meetingId, participant.joinedAt);
     
     // 1. Save to MeetingEvents table
     await Model.MeetingEvents.create({
       classId: meetingSource.classId,
+      slotId: meetingSource.slotId,
       bookingId: meetingSource.bookingId,
       tutorId: meetingSource.tutorId,
       meetingId: meetingId,
@@ -563,11 +648,12 @@ async function handleRecordingStatusUpdate(payload) {
     };
     
     // Find the meeting in Classes or Bookings
-    const meetingSource = await findMeetingSource(meetingId);
+    const meetingSource = await findMeetingSource(meetingId, recording.startedTime);
     
     // 1. Save to MeetingEvents table (audit log)
     await Model.MeetingEvents.create({
       classId: meetingSource.classId,
+      slotId: meetingSource.slotId,
       bookingId: meetingSource.bookingId,
       tutorId: meetingSource.tutorId,
       meetingId: meetingId,
@@ -624,6 +710,7 @@ async function handleChatSynced(payload) {
     // 1. Save to MeetingEvents table (audit log)
     await Model.MeetingEvents.create({
       classId: meetingSource.classId,
+      slotId: meetingSource.slotId,
       bookingId: meetingSource.bookingId,
       tutorId: meetingSource.tutorId,
       meetingId: meetingId,
@@ -669,6 +756,7 @@ async function handleTranscript(payload) {
     // 1. Save to MeetingEvents table (audit log)
     await Model.MeetingEvents.create({
       classId: meetingSource.classId,
+      slotId: meetingSource.slotId,
       bookingId: meetingSource.bookingId,
       tutorId: meetingSource.tutorId,
       meetingId: meetingId,
@@ -725,6 +813,7 @@ async function handleSummary(payload) {
     // 1. Save to MeetingEvents table (audit log)
     await Model.MeetingEvents.create({
       classId: meetingSource.classId,
+      slotId: meetingSource.slotId,
       bookingId: meetingSource.bookingId,
       tutorId: meetingSource.tutorId,
       meetingId: meetingId,
@@ -780,6 +869,7 @@ async function handleLivestreamStatusUpdate(payload) {
     // 1. Save to MeetingEvents table (audit log)
     await Model.MeetingEvents.create({
       classId: meetingSource.classId,
+      slotId: meetingSource.slotId,
       bookingId: meetingSource.bookingId,
       tutorId: meetingSource.tutorId,
       meetingId: meetingId,

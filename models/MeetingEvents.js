@@ -11,6 +11,12 @@ const meetingEventSchema = new Schema({
         default: null,
         index: true
     },
+    slotId: {
+        type: ObjectId,
+        ref: "classSlots",
+        default: null,
+        index: true
+    },
     bookingId: {
         type: ObjectId,
         ref: "Booking",

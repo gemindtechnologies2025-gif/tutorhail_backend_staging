@@ -10,6 +10,12 @@ const meetingParticipantSchema = new Schema({
         default: null,
         index: true
     },
+    slotId: {
+        type: ObjectId,
+        ref: "classSlots",
+        default: null,
+        index: true
+    },
     meetingId: {
         type: String,
         required: true,

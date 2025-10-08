@@ -4,5 +4,8 @@ module.exports = {
     TutorController: require("./TutorController/Tutor"),
     UploadController: require("./UploadController/Upload"),
     PaymentController: require("./PaymentController"),
-    WebhookController: require("./WebhookController/DyteWebhook")
+    WebhookController: {
+        ...require("./WebhookController/DyteWebhook"),
+        ...require("./WebhookController/MeetingData")
+    }
 };
