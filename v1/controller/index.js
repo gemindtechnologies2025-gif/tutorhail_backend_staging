@@ -6,6 +6,7 @@ module.exports = {
     PaymentController: require("./PaymentController"),
     WebhookController: {
         ...require("./WebhookController/DyteWebhook"),
-        ...require("./WebhookController/MeetingData")
+        ...require("./WebhookController/MeetingAnalytics"),
+        ...require("./WebhookController/ChatAnalytics")
     }
 };
