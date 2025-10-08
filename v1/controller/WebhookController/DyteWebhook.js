@@ -75,13 +75,13 @@ async function findMatchingSlot(classId, meetingStartTime, classSlotIds = null) 
       }
     }
 
-    // Only consider it a match if within 30 minutes
-    if (closestSlot && minDifference < 30 * 60 * 1000) {
+    // Only consider it a match if within 2 hours (allows early starts)
+    if (closestSlot && minDifference < 2 * 60 * 60 * 1000) {
       console.log(`✅ Found matching slot: ${closestSlot._id} (difference: ${Math.floor(minDifference / 1000)}s)`);
       return closestSlot._id;
     }
 
-    console.log(`⚠️  No slot found within 30 minutes of meeting start time`);
+    console.log(`⚠️  No slot found within 2 hours of meeting start time`);
     return null;
   } catch (error) {
     console.error('Error finding matching slot:', error);
