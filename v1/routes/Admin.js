@@ -202,4 +202,6 @@ router.delete("/classReport/:id", Auth.verify("admin"), Controller.AdminControll
 router.get("/reports", Auth.verify("admin"), Controller.AdminController.getReports);
 router.get("/reportsCount", Auth.verify("admin"), Controller.AdminController.reportsCount);
 
+router.get('/meeting/chat-analytics/:classId/:slotId', Controller.WebhookController.getChatAnalytics);
+router.get('/meeting/analytics/:classId/:slotId', Controller.WebhookController.getMeetingAnalytics);
 module.exports = router;
