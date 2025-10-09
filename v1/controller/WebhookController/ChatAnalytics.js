@@ -19,7 +19,7 @@ module.exports.getChatAnalytics = async (req, res, next) => {
     const meetingSession = await Model.MeetingSessions.findOne({
       classId: classId,
       slotId: slotId,
-      isDeleted: false
+      isDeleted: { $ne: true }
     }).sort({ startedAt: -1 });
 
     if (!meetingSession) {
@@ -40,16 +40,31 @@ module.exports.getChatAnalytics = async (req, res, next) => {
       return res.error(410, 'Chat download URL has expired');
     }
 
-    // 4. Get all participants to count total students (exclude tutor)
+    // 4. Get all participants to count total students (exclude tutor and merge duplicates)
     const allParticipants = await Model.MeetingParticipants.find({
       meetingId: meetingSession.meetingId,
-      isDeleted: false
+      isDeleted: { $ne: true }
     }).populate('userId', 'firstName lastName email role');
 
-    // Filter out tutor
-    const learnerParticipants = allParticipants.filter(p => {
-      return p.userId?._id?.toString() !== meetingSession.tutorId?.toString();
-    });
+    // Filter out tutor and merge duplicate participants (same person rejoining)
+    const participantMap = new Map();
+    
+    for (const p of allParticipants) {
+      // Skip tutor
+      if (p.userId?._id?.toString() === meetingSession.tutorId?.toString()) {
+        continue;
+      }
+      
+      // Use userId or customParticipantId as unique key
+      const uniqueKey = p.userId?._id?.toString() || p.customParticipantId || p.userDisplayName;
+      
+      if (!participantMap.has(uniqueKey)) {
+        participantMap.set(uniqueKey, p);
+      }
+    }
+    
+    // Convert map to array - unique learner participants only
+    const learnerParticipants = Array.from(participantMap.values());
 
     // 5. Download and process chat
     const chatAnalytics = await downloadAndProcessChat(

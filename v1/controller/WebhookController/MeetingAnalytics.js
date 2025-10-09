@@ -6,6 +6,7 @@ const Model = require('../../../models');
  */
 module.exports.getMeetingAnalytics = async (req, res, next) => {
   try {
+    console.log('🔥 UPDATED CODE RUNNING - Meeting Analytics API called');
     const { classId, slotId } = req.params;
 
     // Validate parameters
@@ -17,7 +18,7 @@ module.exports.getMeetingAnalytics = async (req, res, next) => {
     const meetingSession = await Model.MeetingSessions.findOne({
       classId: classId,
       slotId: slotId,
-      isDeleted: false
+      isDeleted: { $ne: true }
     }).sort({ startedAt: -1 });
 
     if (!meetingSession) {
@@ -27,26 +28,77 @@ module.exports.getMeetingAnalytics = async (req, res, next) => {
     // 2. Get all participants (excluding tutor)
     const allParticipants = await Model.MeetingParticipants.find({
       meetingId: meetingSession.meetingId,
-      isDeleted: false
+      isDeleted: { $ne: true }
     }).populate('userId', 'firstName lastName email role');
 
-    // Filter out tutor participants (role might be in userId or check if it's the class tutor)
-    const learnerParticipants = allParticipants.filter(p => {
-      // Check if participant is not the tutor
-      return p.userId?._id?.toString() !== meetingSession.tutorId?.toString();
-    });
+    // Filter out tutor and merge duplicate participants (same person rejoining)
+    const participantMap = new Map();
+    
+    for (const p of allParticipants) {
+      // Skip tutor
+      if (p.userId?._id?.toString() === meetingSession.tutorId?.toString()) {
+        continue;
+      }
+      
+      // Use userId or customParticipantId as unique key
+      const uniqueKey = p.userId?._id?.toString() || p.customParticipantId || p.userDisplayName;
+      
+      if (participantMap.has(uniqueKey)) {
+        // Participant already exists (rejoined) - merge data
+        const existing = participantMap.get(uniqueKey);
+        
+        // Keep earliest join time
+        if (p.joinedAt < existing.joinedAt) {
+          existing.joinedAt = p.joinedAt;
+        }
+        
+        // Keep latest left time
+        if (p.leftAt && (!existing.leftAt || p.leftAt > existing.leftAt)) {
+          existing.leftAt = p.leftAt;
+        }
+        
+        // Add durations together
+        existing.duration = (existing.duration || 0) + (p.duration || 0);
+        
+      } else {
+        // New participant
+        participantMap.set(uniqueKey, {
+          userId: p.userId,
+          userDisplayName: p.userDisplayName,
+          customParticipantId: p.customParticipantId,
+          joinedAt: p.joinedAt,
+          leftAt: p.leftAt,
+          duration: p.duration || 0,
+          peerId: p.peerId
+        });
+      }
+    }
+    
+    // Convert map to array
+    const learnerParticipants = Array.from(participantMap.values());
+    
+    console.log(`✅ Processed participants: ${learnerParticipants.length} unique learners (tutor excluded)`);
+    console.log(`   Total raw participants from DB: ${allParticipants.length}`);
 
-    // 3. Get enrolled students count
+    // 3. Get enrolled students count - Match Admin API logic
+    const constants = require('../../../common/constants');
     const enrolledCount = await Model.Booking.countDocuments({
-      bookClassId: classId,
-      classSlotIds: slotId,
-      bookingStatus: { $ne: 3 } // Exclude cancelled bookings
+      bookType: constants.BOOK_TYPE.CLASS,
+      bookClassId: classId
+      // Note: Not filtering by slotId or bookingStatus, matching Admin API
     });
+    
+    console.log(`✅ Enrolled students found: ${enrolledCount}`);
 
     // 4. Calculate Attendance Rate
     const participantCount = learnerParticipants.length;
-    const attendanceRate = enrolledCount > 0 
-      ? ((participantCount / enrolledCount) * 100).toFixed(2)
+    
+    // Add +1 for tutor to get total expected participants
+    const totalExpectedParticipants = enrolledCount + 1;
+    console.log(`✅ Total expected participants (enrolled + 1 tutor): ${totalExpectedParticipants}`);
+    
+    const attendanceRate = totalExpectedParticipants > 0 
+      ? ((participantCount / totalExpectedParticipants) * 100).toFixed(2)
       : 0;
 
     // 5. Calculate Average Watch Time
@@ -85,6 +137,7 @@ module.exports.getMeetingAnalytics = async (req, res, next) => {
         // Attendance Metrics
         attendance: {
           enrolledStudents: enrolledCount,
+          totalExpectedParticipants: totalExpectedParticipants,
           participantCount: participantCount,
           attendanceRate: parseFloat(attendanceRate),
           attendanceRateFormatted: `${attendanceRate}%`

@@ -8784,3 +8784,7 @@ module.exports.reportsCount = async (req, res, next) => {
     next(error);
   }
 };
+
+// Meeting Analytics - Re-use from Webhook controllers
+module.exports.getMeetingAnalytics = require('../WebhookController/MeetingAnalytics').getMeetingAnalytics;
+module.exports.getChatAnalytics = require('../WebhookController/ChatAnalytics').getChatAnalytics;
