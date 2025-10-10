@@ -123,6 +123,7 @@ router.put("/updateClass/:id", Auth.verify("admin"), Controller.AdminController.
 router.delete("/deleteClass/:id", Auth.verify("admin"), Controller.AdminController.deleteClass);
 router.get("/classExport", Auth.verify("admin"), Controller.AdminController.classExport);
 router.get("/classDetails", Auth.verify("admin"), Controller.AdminController.classDetails);
+router.get("/getClassRevenue/:classId", Auth.verify("admin"), Controller.AdminController.getClassRevenue);
 
 
 //Promo Codes

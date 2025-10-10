@@ -31,6 +31,7 @@ const getDocumentTypeName = (documentType) => {
 };
 const fs = require("fs");
 const cart = require('../PaymentController/pesapalPayment');
+const { classSlots } = require("../ParentController/Parent");
 
 //Signup the admin using email.
 module.exports.register = async (req, res, next) => {
@@ -8509,24 +8510,6 @@ module.exports.classReportRevert = async (req, res, next) => {
     next(error);
   }
 };
-module.exports.deleteClassReport = async (req, res, next) => {
-  try {
-    let lang = req.headers.lang || "en";
-    const report = await Model.ReportClass.findOne({
-      _id: ObjectId(req.params.id),
-      isDeleted: false
-    });
-    if (!report) {
-      throw new Error(constants.MESSAGES[lang].REPORT_NOT_FOUND);
-    }
-    report.isDeleted = true;
-    report.save();
-    return res.success(
-      constants.MESSAGES[lang].REPORT_DELETED_SUCCESSFULLY, {});
-  } catch (error) {
-    next(error);
-  }
-};
 
 module.exports.getReports = async (req, res, next) => {
   try {
@@ -8788,3 +8771,74 @@ module.exports.reportsCount = async (req, res, next) => {
 // Meeting Analytics - Re-use from Webhook controllers
 module.exports.getMeetingAnalytics = require('../WebhookController/MeetingAnalytics').getMeetingAnalytics;
 module.exports.getChatAnalytics = require('../WebhookController/ChatAnalytics').getChatAnalytics;
+
+module.exports.deleteClassReport = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    const report = await Model.ReportClass.findOne({
+      _id: ObjectId(req.params.id),
+      isDeleted: false
+    });
+    if (!report) {
+      throw new Error(constants.MESSAGES[lang].REPORT_NOT_FOUND);
+    }
+    report.isDeleted = true;
+    report.save();
+    return res.success(
+      constants.MESSAGES[lang].REPORT_DELETED_SUCCESSFULLY, {});
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.getClassRevenue = async (req, res, next) => {
+  try {
+    const classId = req.params.classId; 
+    if (!classId) {
+      return res.status(400).json({ message: "Class ID is required" });
+    }
+
+    const classData = await Model.Classes.findOne({ _id: new ObjectId(classId) });
+    if (!classData) {
+      return res.status(404).json({ message: "Class not found" });
+    }
+
+    const classCost = classData.fees || 0;
+
+    const classSlots = await Model.ClassSlots.find({ classId: new ObjectId(classId) });
+    if (!classSlots || classSlots.length === 0) {
+      return res.status(404).json({ message: "No class slots found for this class" });
+    }
+
+    let totalSeatsAvailable = 0;
+    let totalRemainingSeats = 0;
+
+    classSlots.forEach(slot => {
+      totalSeatsAvailable += slot.seats || 0;
+      totalRemainingSeats += slot.remainingSeats || 0;
+    });
+
+    const bookedSeats = totalSeatsAvailable - totalRemainingSeats;
+    const totalRevenue = bookedSeats * classCost;
+    const averageTicketPrice = bookedSeats ? totalRevenue / bookedSeats : 0;
+    const conversionRate = totalSeatsAvailable ? (bookedSeats / totalSeatsAvailable) * 100 : 0;
+
+    // Right now the totalRevenue and NetRevenve is same as we dont have the now of refunded class booking.
+    return res.status(200).json({
+      classId,
+      className: classData.topic || "N/A",
+      totalSlots: classSlots.length,
+      totalSeatsAvailable,
+      totalRemainingSeats,
+      bookedSeats,
+      classCost,
+      totalRevenue,
+      averageTicketPrice,
+      conversionRate,
+    });
+
+  } catch (error) {
+    console.error("Error in getClassRevenue:", error);
+    next(error);
+  }
+};
