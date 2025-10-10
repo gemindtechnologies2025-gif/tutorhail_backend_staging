@@ -8768,6 +8768,10 @@ module.exports.reportsCount = async (req, res, next) => {
   }
 };
 
+// Meeting Analytics - Re-use from Webhook controllers
+module.exports.getMeetingAnalytics = require('../WebhookController/MeetingAnalytics').getMeetingAnalytics;
+module.exports.getChatAnalytics = require('../WebhookController/ChatAnalytics').getChatAnalytics;
+
 module.exports.deleteClassReport = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";

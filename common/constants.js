@@ -425,6 +425,19 @@ module.exports = {
         VERIFIED: 2,
         REJECTED: 3
     },
+
+    // Dyte Webhook Events
+    DYTE_WEBHOOK_EVENTS: {
+        MEETING_STARTED: 'meeting.started',
+        MEETING_ENDED: 'meeting.ended',
+        PARTICIPANT_JOINED: 'meeting.participantJoined',
+        PARTICIPANT_LEFT: 'meeting.participantLeft',
+        RECORDING_STATUS_UPDATE: 'recording.statusUpdate',
+        LIVESTREAM_STATUS_UPDATE: 'livestreaming.statusUpdate',
+        CHAT_SYNCED: 'meeting.chatSynced',
+        TRANSCRIPT: 'meeting.transcript',
+        SUMMARY: 'meeting.summary'
+    },
     REFUND_STATUS: {
         ACCEPTED: 1,
         REJECTED: 2
