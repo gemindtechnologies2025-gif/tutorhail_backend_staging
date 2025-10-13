@@ -172,9 +172,10 @@ router.delete("/subjects/:id", Auth.verify("admin"), Controller.AdminController.
 //Category Subject
 router.get("/catSubList", Auth.verify("admin"), Controller.AdminController.catSubList);
 
-//Class Booking
+//Class 
 router.get("/classBook", Auth.verify("admin"), Controller.AdminController.getBookedClasses);
 router.get("/classBook/:id", Auth.verify("admin"), Controller.AdminController.bookClassById);
+router.get("/getTopClasses", Auth.verify("admin"), Controller.AdminController.getTopClasses);
 
 //Content Report
 router.get("/contentReport", Auth.verify("admin"), Controller.AdminController.getContentReport);
