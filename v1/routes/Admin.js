@@ -35,6 +35,7 @@ router.put("/updateTutor", Auth.verify("admin"), Controller.AdminController.upda
 router.delete("/deleteTutor/:id", Auth.verify("admin"), Controller.AdminController.deleteTutor);
 router.get("/tutorExport", Auth.verify("admin"), Controller.AdminController.tutorExport);
 router.get("/getTutorDetails/:id", Auth.verify("admin"), Controller.AdminController.getTutorDetails);
+router.get("/getTopTutor", Auth.verify("admin"), Controller.AdminController.getTopTutor);
 
 //Tutor - Teaching Details
 router.post("/teachingDetails", Auth.verify("admin"), Controller.AdminController.teachingDetails);
