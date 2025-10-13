@@ -1555,11 +1555,26 @@ module.exports.getTutor = async (req, res, next) => {
             [req.query.delete === "true" ? "updatedAt" : "createdAt"]: -1
           }
         }];
+        const onlineCountPipeline = [
+          {
+            $match: {
+              ...baseMatch,
+              isActive: true
+            }
+          },
+          {
+            $count: "onlineTutors"
+          }
+        ];
+
       pipeline = await common.pagination(pipeline, skip, limit);
       const [tutor] = await Model.User.aggregate(pipeline);
+      const onlineCount = await Model.User.aggregate(onlineCountPipeline);
+
       return res.success(constants.MESSAGES[lang].DATA_FETCHED, {
         tutor: tutor?.data || [],
-        totalTutor: tutor?.total || 0
+        totalTutor: tutor?.total || 0,
+        onlineTutor: onlineCount?.[0]?.onlineTutors || 0
       });
     } else {
       let pipeline = [];
