@@ -123,6 +123,7 @@ router.put("/updateClass/:id", Auth.verify("admin"), Controller.AdminController.
 router.delete("/deleteClass/:id", Auth.verify("admin"), Controller.AdminController.deleteClass);
 router.get("/classExport", Auth.verify("admin"), Controller.AdminController.classExport);
 router.get("/classDetails", Auth.verify("admin"), Controller.AdminController.classDetails);
+router.get("/getClassRevenue/:classId", Auth.verify("admin"), Controller.AdminController.getClassRevenue);
 
 
 //Promo Codes
@@ -201,5 +202,9 @@ router.delete("/classReport/:id", Auth.verify("admin"), Controller.AdminControll
 //All reports
 router.get("/reports", Auth.verify("admin"), Controller.AdminController.getReports);
 router.get("/reportsCount", Auth.verify("admin"), Controller.AdminController.reportsCount);
+
+//Meeting Analytics
+router.get('/meeting/chat-analytics/:classId/:slotId', Auth.verify("admin"), Controller.AdminController.getChatAnalytics);
+router.get('/meeting/analytics/:classId/:slotId', Auth.verify("admin"), Controller.AdminController.getMeetingAnalytics);
 
 module.exports = router;

@@ -216,10 +216,10 @@ module.exports = (io, socket, socketData) => {
   socket.on("updateTutorStatus", async (data) => {
     try {
       const tutorId = socketData._id;
-      const isOnline = data?.isOnline ?? false;
+      const isActive = data?.isActive ?? false;
       
-      await Model.User.findByIdAndUpdate(tutorId, { isOnline });
-      io.to("watchTutorStatus").emit("tutorStatusUpdate", { tutorId, isOnline });
+      await Model.User.findByIdAndUpdate(tutorId, { isActive });
+      io.to("watchTutorStatus").emit("tutorStatusUpdate", { tutorId, isActive });
     } catch (error) {
       console.error(error.message || error);
     }

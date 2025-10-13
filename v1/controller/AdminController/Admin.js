@@ -13,8 +13,25 @@ const jsonexport = require("jsonexport");
 const axios = require("axios");
 const moment = require('moment');
 const pdf = require("html-pdf-node");
+
+// Helper function to get document type name
+const getDocumentTypeName = (documentType) => {
+  switch (documentType) {
+    case constants.DOCUMENT_TYPE.ID_PROOF:
+      return "ID Proof";
+    case constants.DOCUMENT_TYPE.ACHIEVEMENTS:
+      return "Achievements";
+    case constants.DOCUMENT_TYPE.CERTIFICATES:
+      return "Certificates";
+    case constants.DOCUMENT_TYPE.VERIFICATION_DOCS:
+      return "Verification Documents";
+    default:
+      return "Document";
+  }
+};
 const fs = require("fs");
 const cart = require('../PaymentController/pesapalPayment');
+const { classSlots } = require("../ParentController/Parent");
 
 //Signup the admin using email.
 module.exports.register = async (req, res, next) => {
@@ -2308,10 +2325,27 @@ module.exports.approveDocument = async (req, res, next) => {
       }
     }, {
       new: true
-    });
+    }).populate('tutorId', 'name email');
 
     if (!doc) {
       throw new Error(constants.MESSAGES[lang].DOCUMENT_NOT_FOUND);
+    }
+
+    // Send approval email to tutor
+    if (doc.tutorId && doc.tutorId.email) {
+      try {
+        const DocumentEmailService = require('../../../services/DocumentEmailService');
+        await DocumentEmailService.documentApproved({
+          email: doc.tutorId.email,
+          tutorName: doc.tutorId.name,
+          documentType: getDocumentTypeName(doc.documentType),
+          description: doc.description || 'N/A',
+          approvedDate: new Date().toLocaleDateString()
+        });
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        // Don't fail the API if email fails
+      }
     }
 
     return res.success(constants.MESSAGES[lang].DOCUMENT_APPROVED_SUCCESSFULLY, doc);
@@ -2336,10 +2370,28 @@ module.exports.rejectDocument = async (req, res, next) => {
       }
     }, {
       new: true
-    });
+    }).populate('tutorId', 'name email');
 
     if (!doc) {
       throw new Error(constants.MESSAGES[lang].DOCUMENT_NOT_FOUND);
+    }
+
+    // Send rejection email to tutor
+    if (doc.tutorId && doc.tutorId.email) {
+      try {
+        const DocumentEmailService = require('../../../services/DocumentEmailService');
+        await DocumentEmailService.documentRejected({
+          email: doc.tutorId.email,
+          tutorName: doc.tutorId.name,
+          documentType: getDocumentTypeName(doc.documentType),
+          description: doc.description || 'N/A',
+          rejectedDate: new Date().toLocaleDateString(),
+          rejectionReason: doc.rejectionReason
+        });
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        // Don't fail the API if email fails
+      }
     }
 
     return res.success(constants.MESSAGES[lang].DOCUMENT_REJECTED_SUCCESSFULLY, doc);
@@ -8458,24 +8510,6 @@ module.exports.classReportRevert = async (req, res, next) => {
     next(error);
   }
 };
-module.exports.deleteClassReport = async (req, res, next) => {
-  try {
-    let lang = req.headers.lang || "en";
-    const report = await Model.ReportClass.findOne({
-      _id: ObjectId(req.params.id),
-      isDeleted: false
-    });
-    if (!report) {
-      throw new Error(constants.MESSAGES[lang].REPORT_NOT_FOUND);
-    }
-    report.isDeleted = true;
-    report.save();
-    return res.success(
-      constants.MESSAGES[lang].REPORT_DELETED_SUCCESSFULLY, {});
-  } catch (error) {
-    next(error);
-  }
-};
 
 module.exports.getReports = async (req, res, next) => {
   try {
@@ -8730,6 +8764,81 @@ module.exports.reportsCount = async (req, res, next) => {
       postReportCount
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+// Meeting Analytics - Re-use from Webhook controllers
+module.exports.getMeetingAnalytics = require('../WebhookController/MeetingAnalytics').getMeetingAnalytics;
+module.exports.getChatAnalytics = require('../WebhookController/ChatAnalytics').getChatAnalytics;
+
+module.exports.deleteClassReport = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    const report = await Model.ReportClass.findOne({
+      _id: ObjectId(req.params.id),
+      isDeleted: false
+    });
+    if (!report) {
+      throw new Error(constants.MESSAGES[lang].REPORT_NOT_FOUND);
+    }
+    report.isDeleted = true;
+    report.save();
+    return res.success(
+      constants.MESSAGES[lang].REPORT_DELETED_SUCCESSFULLY, {});
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.getClassRevenue = async (req, res, next) => {
+  try {
+    const classId = req.params.classId; 
+    if (!classId) {
+      return res.status(400).json({ message: "Class ID is required" });
+    }
+
+    const classData = await Model.Classes.findOne({ _id: new ObjectId(classId) });
+    if (!classData) {
+      return res.status(404).json({ message: "Class not found" });
+    }
+
+    const classCost = classData.fees || 0;
+
+    const classSlots = await Model.ClassSlots.find({ classId: new ObjectId(classId) });
+    if (!classSlots || classSlots.length === 0) {
+      return res.status(404).json({ message: "No class slots found for this class" });
+    }
+
+    let totalSeatsAvailable = 0;
+    let totalRemainingSeats = 0;
+
+    classSlots.forEach(slot => {
+      totalSeatsAvailable += slot.seats || 0;
+      totalRemainingSeats += slot.remainingSeats || 0;
+    });
+
+    const bookedSeats = totalSeatsAvailable - totalRemainingSeats;
+    const totalRevenue = bookedSeats * classCost;
+    const averageTicketPrice = bookedSeats ? totalRevenue / bookedSeats : 0;
+    const conversionRate = totalSeatsAvailable ? (bookedSeats / totalSeatsAvailable) * 100 : 0;
+
+    // Right now the totalRevenue and NetRevenve is same as we dont have the now of refunded class booking.
+    return res.status(200).json({
+      classId,
+      className: classData.topic || "N/A",
+      totalSlots: classSlots.length,
+      totalSeatsAvailable,
+      totalRemainingSeats,
+      bookedSeats,
+      classCost,
+      totalRevenue,
+      averageTicketPrice,
+      conversionRate,
+    });
+
+  } catch (error) {
+    console.error("Error in getClassRevenue:", error);
     next(error);
   }
 };
