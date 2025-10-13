@@ -8842,3 +8842,80 @@ module.exports.getClassRevenue = async (req, res, next) => {
     next(error);
   }
 };
+
+module.exports.getTopTutor = async (req, res, next) => {
+  try {
+    const tutors = await Model.User.aggregate([
+      {
+        $match: {
+          isDeleted: false,
+          role: constants.APP_ROLE.TUTOR
+        }
+      },
+      {
+        $lookup: {
+          from: "bookings",
+          let: { tutorId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$tutorId", "$$tutorId"] }
+              }
+            }
+          ],
+          as: "bookingDocs"
+        }
+      },
+      {
+        $addFields: {
+          bookingSlotIds: {
+            $map: {
+              input: "$bookingDocs",
+              as: "b",
+              in: "$$b.bookSlotId"
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
+          slotCount: {
+            $size: {
+              $setUnion: [
+                "$bookingSlotIds"
+              ]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          username: 1,
+          totalEarn: 1,
+          classEarn: 1,
+          followers: 1,
+          views: 1,
+          avgRating: 1,
+          oneOnOneEarn: 1,
+          booksCount: 1,
+          withdrawAmount: 1,
+          balance: 1,
+          type: 1,
+          role: 1,
+          noOfClasses: "$slotCount" 
+        }
+      },
+      {
+        $sort: { totalEarn: -1 }
+      }
+    ]);
+
+    res.status(200).json({ status: 200, message: "success", data: tutors });
+  } catch (error) {
+    console.error("Error in getTopTutor:", error);
+    next(error);
+  }
+};
+
