@@ -223,6 +223,11 @@ module.exports.rejectDocument = Joi.object({
     rejectionReason: Joi.string().optional().allow("")
 });
 
+module.exports.requestDocument = Joi.object({
+    tutorId: Joi.string().required(),
+    requestMessage: Joi.string().required()
+});
+
 module.exports.updateWithdrawStatus = Joi.object({
     status: Joi.string().required(),
     ids: Joi.array().required()

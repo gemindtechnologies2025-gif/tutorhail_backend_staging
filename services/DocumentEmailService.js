@@ -164,3 +164,128 @@ exports.documentRejected = async (payload) => {
     console.error("documentRejected", error);
   }
 };
+
+// Document Request Email
+exports.documentRequested = async (payload) => {
+  try {
+    if (!payload.email) {
+      throw new Error("Email missing");
+    }
+    
+    let payloadData = {
+      to: payload.email,
+      title: "Document Upload Request - Action Required - Tutor Hail",
+      message: `
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Urbanist:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+</head>
+<body style="margin: 0; padding: 0; box-sizing: border-box; font-family: 'Urbanist', sans-serif; background-color: #f1f3f4;">
+    <table style="border-bottom: 4px solid #ffc107; width: 650px; margin: 0px auto; background: #fff; border-spacing: 0;">
+        <tr>
+            <td style="padding: 0; background-color: #22252D;">
+                <figure style="margin: auto; text-align: center; padding: 15px; width: 100px; height: auto;">
+                    <img src="https://trtl1.s3.amazonaws.com/1714019523907logoo.png" style="width: 100%; height: auto;">
+                </figure>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 20px 20px 40px;">
+                <h4 style="color: #000000; font-size: 22px; font-weight: 800; margin: 0 0 15px; line-height: 1.3;">Hi, ${payload.tutorName}</h4>
+                
+                <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                    <h3 style="color: #856404; margin: 0 0 10px; font-size: 18px;">📄 Document Upload Request</h3>
+                    <p style="color: #856404; margin: 0; font-size: 14px;">We need you to upload a document to complete your tutor verification.</p>
+                </div>
+
+                <p style="margin: 15px 0 0; font-size: 16px; color: #000000; font-weight: 500; line-height: 1.5;">
+                    Our verification team requires additional documentation from you to complete your profile verification. Please review the request below and upload the required document at your earliest convenience.
+                </p>
+
+                <div style="background-color: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                    <h5 style="color: #004085; margin: 0 0 10px; font-size: 16px; font-weight: 600;">📝 Message from Admin:</h5>
+                    <p style="color: #004085; margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">
+                        ${payload.requestMessage || 'Please upload the required document for verification.'}
+                    </p>
+                </div>
+
+                <div style="background-color: #d1ecf1; border: 1px solid #bee5eb; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                    <h5 style="color: #0c5460; margin: 0 0 10px; font-size: 16px; font-weight: 600;">How to Upload:</h5>
+                    <ul style="color: #0c5460; margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.8;">
+                        <li>Log in to your Tutor Hail account</li>
+                        <li>Go to your Profile/Documents section</li>
+                        <li>Upload the requested document</li>
+                        <li>Ensure the document is clear, readable, and valid</li>
+                        <li>Submit for verification</li>
+                    </ul>
+                </div>
+
+                <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+                    <h5 style="color: #856404; margin: 0 0 5px; font-size: 14px; font-weight: 600;">⚠️ Important:</h5>
+                    <p style="color: #856404; margin: 0; font-size: 13px;">
+                        Please ensure your documents are clear, valid, and meet our quality standards. This will help us verify your profile faster.
+                    </p>
+                </div>
+
+                <p style="margin: 15px 0 0; font-size: 16px; color: #000000; font-weight: 500; line-height: 1.5;">
+                    Uploading the requested document will help us complete your verification process and get you started with teaching on our platform.
+                </p>
+
+                <p style="margin: 15px 0 0; font-size: 16px; color: #000000; font-weight: 500; line-height: 1.5;">
+                    If you have any questions or need clarification about the document requirements, please don't hesitate to contact our support team at <a href="mailto:support@tutorhail.com" style="color: #65A442; text-decoration: none;">support@tutorhail.com</a>
+                </p>
+
+                <p style="margin: 20px 0 0; font-size: 16px; color: #000000; font-weight: 500; line-height: 1.5;">
+                    Best regards,<br>
+                    <strong>Team Tutor Hail</strong>
+                </p>
+            </td>
+        </tr>
+        <tr>
+            <td style="text-align: center; padding: 15px 25px; color: #fff; background: #1D1D1D;">
+                <ul style="padding-bottom: 10px; list-style: none; margin: 0;">
+                    <li style="display: inline-block; margin-right: 5px;">
+                        <a href="https://www.instagram.com/tutorhail?igshid=MWExZno1YjBjdGdvag==" style="cursor: pointer; margin-right: 7px; display: inline-flex; justify-content: center; align-items: center; width: 35px; height: 35px; border-radius: 35px; background: #65A442; padding: 5px;">  
+                            <figure style="margin: 0; width: 30px; height: 30px; padding: 5px;">
+                                <img src="https://trtl1.s3.amazonaws.com/1715314632634instagram.png" style="width: 100%; height: 100%; object-fit: contain; filter: brightness(0) invert(1);">
+                            </figure>
+                        </a>
+                    </li>
+                    <li style="display: inline-block;">
+                        <a style="cursor: pointer; margin-right: 5px; display: inline-flex; justify-content: center; align-items: center; width: 35px; height: 35px; border-radius: 35px; background: #65A442; padding: 7px;">  
+                            <figure style="margin: 0; width: 30px; height: 30px; padding: 10px;">
+                                <img src="https://trtl1.s3.amazonaws.com/1715314446074facebook.png" style="width: 100%; height: 100%; object-fit: contain; filter: brightness(0) invert(1);">
+                            </figure>
+                        </a>
+                    </li>
+                    <li style="display: inline-block;">
+                        <a href="https://www.linkedin.com/company/tutorhail/" style="cursor: pointer; margin-right: 5px; display: inline-flex; justify-content: center; align-items: center; width: 35px; height: 35px; border-radius: 35px; background: #65A442; padding: 7px;">  
+                            <figure style="margin: 0; width: 30px; height: 30px; padding: 5px;">
+                                <img src="https://trtl1.s3.amazonaws.com/1715314717524linkdin.png" style="width: 100%; height: 100%; object-fit: contain; filter: brightness(0) invert(1);">
+                            </figure>
+                        </a>
+                    </li>
+                    <li style="display: inline-block;">
+                        <a style="cursor: pointer; margin-right: 5px; display: inline-flex; justify-content: center; align-items: center; width: 35px; height: 35px; border-radius: 35px; background: #65A442; padding: 7px;">  
+                            <figure style="margin: 0; width: 30px; height: 30px; padding: 5px;">
+                                <img src="https://trtl1.s3.amazonaws.com/1715314675484youtube.png" style="width: 100%; height: 100%; object-fit: contain; filter: brightness(0) invert(1);">
+                            </figure>
+                        </a>
+                    </li>
+                </ul>
+                <p style="margin: 0 0 5px; font-size: 13px; font-weight: 500;">Copyright © ${new Date().getFullYear()}. All rights reserved</p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+`,
+    };
+    await EmailService.send(payloadData);
+  } catch (error) {
+    console.error("documentRequested", error);
+  }
+};
