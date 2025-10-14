@@ -15,7 +15,7 @@ async function generateToken() {
           let config = {
             method: 'post',
             maxBodyLength: Infinity,
-            url: 'http://cybqa.pesapal.com/pesapalv3/api/Auth/RequestToken',
+            url: `${process.env.PESAPAL_URL}/Auth/RequestToken`,
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -40,7 +40,7 @@ async function generateIPN(token) {
     let config = {
       method: 'post',
       maxBodyLength: Infinity,
-      url: 'http://cybqa.pesapal.com/pesapalv3/api/URLSetup/RegisterIPN',
+      url: `${process.env.PESAPAL_URL}/URLSetup/RegisterIPN`,
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -91,7 +91,7 @@ async function generatePaymentLink(body, user) {
     let config = {
       method: 'post',
       maxBodyLength: Infinity,
-      url: 'http://cybqa.pesapal.com/pesapalv3/api/Transactions/SubmitOrderRequest',
+      url: `${process.env.PESAPAL_URL}/Transactions/SubmitOrderRequest`,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': token,
@@ -183,7 +183,7 @@ async function payment(req, res, next) {
       let config = {
         method: 'get',
         maxBodyLength: Infinity,
-        url: `http://cybqa.pesapal.com/pesapalv3/api/Transactions/GetTransactionStatus?orderTrackingId=${trackId}`,
+        url: `${process.env.PESAPAL_URL}/Transactions/GetTransactionStatus?orderTrackingId=${trackId}`,
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -212,7 +212,7 @@ async function payment(req, res, next) {
       let config = {
         method: 'post',
         maxBodyLength: Infinity,
-        url: 'http://cybqa.pesapal.com/pesapalv3/api/Transactions/RefundRequest',
+        url: `${process.env.PESAPAL_URL}/Transactions/RefundRequest`,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': token,
