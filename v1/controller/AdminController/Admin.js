@@ -8939,13 +8939,8 @@ module.exports.getTopTutor = async (req, res, next) => {
       },
       {
         $addFields: {
-          slotCount: {
-            $size: {
-              $setUnion: [
-                "$bookingSlotIds"
-              ]
-            }
-          }
+          slotCount: { $size: { $setUnion: ["$bookingSlotIds"] } },
+          totalStudents: { $size: "$bookingDocs" }
         }
       },
       {
@@ -8964,7 +8959,8 @@ module.exports.getTopTutor = async (req, res, next) => {
           balance: 1,
           type: 1,
           role: 1,
-          noOfClasses: "$slotCount" 
+          noOfClasses: "$slotCount",
+          totalStudents: 1   
         }
       },
       {
