@@ -8995,6 +8995,14 @@ module.exports.getTopClasses = async (req, res, next) => {
           }
         },
         {
+          $lookup: {
+            from: "subjects",
+            localField: "subjectId",
+            foreignField: "_id",
+            as: "subjectDetails"
+          }
+        },
+        {
           $addFields: {
             totalBookings: { $size: "$bookings" },
             revenue: {
@@ -9009,6 +9017,9 @@ module.exports.getTopClasses = async (req, res, next) => {
             totalStudents: { $size: "$bookings" },
             tutorName: {
               $arrayElemAt: [ "$tutorDetails.name", 0 ]
+            },
+            subjectName: {
+              $arrayElemAt: [ "$subjectDetails.name", 0 ]
             }
           }
         },
@@ -9020,7 +9031,8 @@ module.exports.getTopClasses = async (req, res, next) => {
             revenue: 1,
             totalStudents: 1,
             avgRating: 1,
-            tutorName: 1
+            tutorName: 1,
+            subjectName: 1,
           }
         },
         {
