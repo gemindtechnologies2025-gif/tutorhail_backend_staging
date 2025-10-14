@@ -8934,3 +8934,64 @@ module.exports.getTopTutor = async (req, res, next) => {
   }
 };
 
+module.exports.getTopClasses = async (req, res, next) => {
+    try {
+      const result = await Model.Classes.aggregate([
+        {
+          $lookup: {
+            from: "bookings",
+            localField: "_id",
+            foreignField: "bookClassId",
+            as: "bookings"
+          }
+        },
+        {
+          $lookup: {
+            from: "users",              
+            localField: "tutorId",
+            foreignField: "_id",
+            as: "tutorDetails"
+          }
+        },
+        {
+          $addFields: {
+            totalBookings: { $size: "$bookings" },
+            revenue: {
+              $sum: {
+                $map: {
+                  input: "$bookings",
+                  as: "booking",
+                  in: { $ifNull: [ "$$booking.grandTotal", 0 ] }
+                }
+              }
+            },
+            totalStudents: { $size: "$bookings" },
+            tutorName: {
+              $arrayElemAt: [ "$tutorDetails.name", 0 ]
+            }
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            topic: 1,
+            totalBookings: 1,
+            revenue: 1,
+            totalStudents: 1,
+            avgRating: 1,
+            tutorName: 1
+          }
+        },
+        {
+          $sort: { revenue: -1 }
+        }
+      ]);
+      res.status(200).json({
+        status: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("Error in getTopClassesWithBookings:", error);
+      next(error);
+    }
+  };
