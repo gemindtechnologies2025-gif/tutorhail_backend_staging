@@ -68,6 +68,7 @@ module.exports.addBooking = Joi.object({
     additionalInfo: Joi.string().optional(),
     distance: Joi.number().required(),
     learnToday: Joi.string().optional(),
+    currency: Joi.string().optional(),
     classModeOnline: Joi.boolean().optional(),
     promocodeId: Joi.objectId().optional()
 });
