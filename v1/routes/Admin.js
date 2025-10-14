@@ -55,6 +55,7 @@ router.put("/updateDocuments/:id", Auth.verify("admin"), Controller.AdminControl
 router.delete("/deleteDocuments/:id", Auth.verify("admin"), Controller.AdminController.deleteDocuments);
 router.put("/approveDocument/:id", Auth.verify("admin"), Controller.AdminController.approveDocument);
 router.put("/rejectDocument/:id", Auth.verify("admin"), Controller.AdminController.rejectDocument);
+router.post("/requestDocument", Auth.verify("admin"), Controller.AdminController.requestDocument);
 
 //Tutor - review
 router.get("/tutorReview/:id", Auth.verify("admin"), Controller.AdminController.tutorReview);

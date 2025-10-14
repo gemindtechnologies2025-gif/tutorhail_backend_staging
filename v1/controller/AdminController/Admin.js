@@ -2415,6 +2415,51 @@ module.exports.rejectDocument = async (req, res, next) => {
   }
 };
 
+module.exports.requestDocument = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    
+    await Validation.Admin.requestDocument.validateAsync(req.body);
+    
+    const tutor = await Model.User.findOne({
+      _id: ObjectId(req.body.tutorId),
+      isDeleted: false,
+      role: constants.APP_ROLE.TUTOR
+    });
+
+    if (!tutor) {
+      throw new Error(constants.MESSAGES[lang].USER_DATA_MISSING);
+    }
+
+    if (!tutor.email) {
+      throw new Error(constants.MESSAGES[lang].EMAIL_MISSING);
+    }
+
+    // Send document request email to tutor
+    try {
+      const DocumentEmailService = require('../../../services/DocumentEmailService');
+      await DocumentEmailService.documentRequested({
+        email: tutor.email,
+        tutorName: tutor.name,
+        requestMessage: req.body.requestMessage
+      });
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      throw new Error(constants.MESSAGES[lang].EMAIL_SENDING_FAILED || 'Failed to send email');
+    }
+
+    return res.success(constants.MESSAGES[lang].DOCUMENT_REQUEST_SENT_SUCCESSFULLY || 'Document request sent successfully', {
+      tutorId: tutor._id,
+      tutorName: tutor.name,
+      tutorEmail: tutor.email,
+      requestMessage: req.body.requestMessage,
+      requestedAt: new Date()
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 //Tutor Details
 module.exports.getTutorDetails = async (req, res, next) => {
   try {
