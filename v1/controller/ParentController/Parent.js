@@ -2092,6 +2092,7 @@ module.exports.getWishlist = async (req, res, next) => {
 //Booking
 module.exports.addBooking = async (req, res, next) => {
   try {
+    console.log(req.body, "req.body");
     let lang = req.headers.lang || "en";
     await Validation.Parent.addBooking.validateAsync(req.body);
     req.body.parentId = req.user._id;
@@ -2123,20 +2124,20 @@ module.exports.addBooking = async (req, res, next) => {
     }
 
     let calDist = req.body.distance;
-    const countryISOCode = req.user?.countryISOCode || 'US';
+
     let setting = await Model.AppSetting.findOne({
       currency: req.body.currency,
       isDeleted: false
     }).select("serviceFees serviceType distanceAmount distanceType");
 
-    let distancePrice = setting.distanceAmount;
-    let distanceType = setting.distanceType;
-    let serviceType = setting.serviceType;
-    let servicePrice = setting.serviceFees;
+    let distancePrice = setting?.distanceAmount || 0;
+    let distanceType = setting?.distanceType || constants.DISTANCE_TYPE.KILOMETER;
+    let serviceType = setting?.serviceType || constants.SERVICE_TYPE.FLAT;
+    let servicePrice = setting?.serviceFees || 0;
 
     let bookingDistance = calDist / 1000;
 
-    console.log('distancePrice', countryISOCode, calDist, distancePrice, distanceType, bookingDistance);
+    console.log('distancePrice',req.body.currency, setting, calDist, distancePrice, distanceType, bookingDistance);
 
     if (distancePrice > 0) {
       if (distanceType === constants.DISTANCE_TYPE.KILOMETER) {
