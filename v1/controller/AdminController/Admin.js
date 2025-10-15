@@ -31,6 +31,7 @@ const getDocumentTypeName = (documentType) => {
 };
 const fs = require("fs");
 const cart = require('../PaymentController/pesapalPayment');
+const { classSlots } = require("../ParentController/Parent");
 
 //Signup the admin using email.
 module.exports.register = async (req, res, next) => {
@@ -1554,11 +1555,26 @@ module.exports.getTutor = async (req, res, next) => {
             [req.query.delete === "true" ? "updatedAt" : "createdAt"]: -1
           }
         }];
+        const onlineCountPipeline = [
+          {
+            $match: {
+              ...baseMatch,
+              isActive: true
+            }
+          },
+          {
+            $count: "onlineTutors"
+          }
+        ];
+
       pipeline = await common.pagination(pipeline, skip, limit);
       const [tutor] = await Model.User.aggregate(pipeline);
+      const onlineCount = await Model.User.aggregate(onlineCountPipeline);
+
       return res.success(constants.MESSAGES[lang].DATA_FETCHED, {
         tutor: tutor?.data || [],
-        totalTutor: tutor?.total || 0
+        totalTutor: tutor?.total || 0,
+        onlineTutor: onlineCount?.[0]?.onlineTutors || 0
       });
     } else {
       let pipeline = [];
@@ -1619,6 +1635,156 @@ module.exports.getTutor = async (req, res, next) => {
       const [tutor] = await Model.User.aggregate(pipeline);
       return res.success(constants.MESSAGES[lang].DATA_FETCHED, tutor || null);
     }
+  } catch (error) {
+    next(error);
+  }
+};
+
+//Get All Users (Tutors and Parents) in a single API
+module.exports.getAllUsers = async (req, res, next) => {
+  try {
+    const lang = req.headers.lang || "en";
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 10);
+    const skip = (page - 1) * limit;
+
+    let baseMatch = {};
+    baseMatch.isDeleted = req.query.delete === "true" ? true : false;
+
+    // Role filter - can filter by specific role or get all
+    if (req.query.role) {
+      if (req.query.role === "tutor") {
+        baseMatch.role = constants.APP_ROLE.TUTOR;
+      } else if (req.query.role === "parent") {
+        baseMatch.role = constants.APP_ROLE.PARENT;
+      }
+    } else {
+      // Get both tutors and parents
+      baseMatch.role = { $in: [constants.APP_ROLE.TUTOR, constants.APP_ROLE.PARENT] };
+    }
+
+    // Tutor status filter (only applicable for tutors)
+    if (req.query.tutorStatus) {
+      baseMatch.tutorStatus = Number(req.query.tutorStatus);
+    }
+
+    let pipeline = [
+      {
+        $match: {
+          ...baseMatch,
+          ...(req.query.search && {
+            $or: [
+              { name: { $regex: req.query.search, $options: "i" } },
+              { email: { $regex: req.query.search, $options: "i" } },
+              { phoneNo: { $regex: req.query.search, $options: "i" } },
+              { userName: { $regex: req.query.search, $options: "i" } }
+            ]
+          })
+        }
+      },
+      {
+        $addFields: {
+          roleType: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$role", constants.APP_ROLE.TUTOR] }, then: "tutor" },
+                { case: { $eq: ["$role", constants.APP_ROLE.PARENT] }, then: "parent" }
+              ],
+              default: "unknown"
+            }
+          }
+        }
+      },
+      {
+        $sort: {
+          [req.query.delete === "true" ? "updatedAt" : "createdAt"]: -1
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          userName: 1,
+          email: 1,
+          dialCode: 1,
+          phoneNo: 1,
+          gender: 1,
+          age: 1,
+          image: 1,
+          address: 1,
+          shortBio: 1,
+          role: 1,
+          roleType: 1,
+          tutorStatus: 1,
+          isPhoneVerified: 1,
+          isEmailVerified: 1,
+          isBlocked: 1,
+          isDeleted: 1,
+          isProfileComplete: 1,
+          isActive: 1,
+          isOnline: 1,
+          latitude: 1,
+          longitude: 1,
+          avgRating: 1,
+          followers: 1,
+          views: 1,
+          totalEarn: 1,
+          createdAt: 1,
+          updatedAt: 1
+        }
+      }
+    ];
+
+    // Get counts for different user types
+    const tutorCountPipeline = [
+      {
+        $match: {
+          role: constants.APP_ROLE.TUTOR,
+          isDeleted: req.query.delete === "true" ? true : false
+        }
+      },
+      {
+        $count: "totalTutors"
+      }
+    ];
+
+    const parentCountPipeline = [
+      {
+        $match: {
+          role: constants.APP_ROLE.PARENT,
+          isDeleted: req.query.delete === "true" ? true : false
+        }
+      },
+      {
+        $count: "totalParents"
+      }
+    ];
+
+    const onlineTutorsPipeline = [
+      {
+        $match: {
+          role: constants.APP_ROLE.TUTOR,
+          isDeleted: false,
+          isActive: true
+        }
+      },
+      {
+        $count: "onlineTutors"
+      }
+    ];
+
+    pipeline = await common.pagination(pipeline, skip, limit);
+    const [users] = await Model.User.aggregate(pipeline);
+    const tutorCount = await Model.User.aggregate(tutorCountPipeline);
+    const parentCount = await Model.User.aggregate(parentCountPipeline);
+    const onlineTutors = await Model.User.aggregate(onlineTutorsPipeline);
+
+    return res.success(constants.MESSAGES[lang].DATA_FETCHED, {
+      users: users?.data || [],
+      totalUsers: users?.total || 0,
+      totalTutors: tutorCount?.[0]?.totalTutors || 0,
+      totalParents: parentCount?.[0]?.totalParents || 0,
+      onlineTutors: onlineTutors?.[0]?.onlineTutors || 0
+    });
   } catch (error) {
     next(error);
   }
@@ -2394,6 +2560,51 @@ module.exports.rejectDocument = async (req, res, next) => {
     }
 
     return res.success(constants.MESSAGES[lang].DOCUMENT_REJECTED_SUCCESSFULLY, doc);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.requestDocument = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    
+    await Validation.Admin.requestDocument.validateAsync(req.body);
+    
+    const tutor = await Model.User.findOne({
+      _id: ObjectId(req.body.tutorId),
+      isDeleted: false,
+      role: constants.APP_ROLE.TUTOR
+    });
+
+    if (!tutor) {
+      throw new Error(constants.MESSAGES[lang].USER_DATA_MISSING);
+    }
+
+    if (!tutor.email) {
+      throw new Error(constants.MESSAGES[lang].EMAIL_MISSING);
+    }
+
+    // Send document request email to tutor
+    try {
+      const DocumentEmailService = require('../../../services/DocumentEmailService');
+      await DocumentEmailService.documentRequested({
+        email: tutor.email,
+        tutorName: tutor.name,
+        requestMessage: req.body.requestMessage
+      });
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      throw new Error(constants.MESSAGES[lang].EMAIL_SENDING_FAILED || 'Failed to send email');
+    }
+
+    return res.success(constants.MESSAGES[lang].DOCUMENT_REQUEST_SENT_SUCCESSFULLY || 'Document request sent successfully', {
+      tutorId: tutor._id,
+      tutorName: tutor.name,
+      tutorEmail: tutor.email,
+      requestMessage: req.body.requestMessage,
+      requestedAt: new Date()
+    });
   } catch (error) {
     next(error);
   }
@@ -8509,24 +8720,6 @@ module.exports.classReportRevert = async (req, res, next) => {
     next(error);
   }
 };
-module.exports.deleteClassReport = async (req, res, next) => {
-  try {
-    let lang = req.headers.lang || "en";
-    const report = await Model.ReportClass.findOne({
-      _id: ObjectId(req.params.id),
-      isDeleted: false
-    });
-    if (!report) {
-      throw new Error(constants.MESSAGES[lang].REPORT_NOT_FOUND);
-    }
-    report.isDeleted = true;
-    report.save();
-    return res.success(
-      constants.MESSAGES[lang].REPORT_DELETED_SUCCESSFULLY, {});
-  } catch (error) {
-    next(error);
-  }
-};
 
 module.exports.getReports = async (req, res, next) => {
   try {
@@ -8784,3 +8977,224 @@ module.exports.reportsCount = async (req, res, next) => {
     next(error);
   }
 };
+
+// Meeting Analytics - Re-use from Webhook controllers
+module.exports.getMeetingAnalytics = require('../WebhookController/MeetingAnalytics').getMeetingAnalytics;
+module.exports.getChatAnalytics = require('../WebhookController/ChatAnalytics').getChatAnalytics;
+
+module.exports.deleteClassReport = async (req, res, next) => {
+  try {
+    let lang = req.headers.lang || "en";
+    const report = await Model.ReportClass.findOne({
+      _id: ObjectId(req.params.id),
+      isDeleted: false
+    });
+    if (!report) {
+      throw new Error(constants.MESSAGES[lang].REPORT_NOT_FOUND);
+    }
+    report.isDeleted = true;
+    report.save();
+    return res.success(
+      constants.MESSAGES[lang].REPORT_DELETED_SUCCESSFULLY, {});
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.getClassRevenue = async (req, res, next) => {
+  try {
+    const classId = req.params.classId; 
+    if (!classId) {
+      return res.status(400).json({ message: "Class ID is required" });
+    }
+
+    const classData = await Model.Classes.findOne({ _id: new ObjectId(classId) });
+    if (!classData) {
+      return res.status(404).json({ message: "Class not found" });
+    }
+
+    const classCost = classData.fees || 0;
+
+    const classSlots = await Model.ClassSlots.find({ classId: new ObjectId(classId) });
+    if (!classSlots || classSlots.length === 0) {
+      return res.status(404).json({ message: "No class slots found for this class" });
+    }
+
+    let totalSeatsAvailable = 0;
+    let totalRemainingSeats = 0;
+
+    classSlots.forEach(slot => {
+      totalSeatsAvailable += slot.seats || 0;
+      totalRemainingSeats += slot.remainingSeats || 0;
+    });
+
+    const bookedSeats = totalSeatsAvailable - totalRemainingSeats;
+    const totalRevenue = bookedSeats * classCost;
+    const averageTicketPrice = bookedSeats ? totalRevenue / bookedSeats : 0;
+    const conversionRate = totalSeatsAvailable ? (bookedSeats / totalSeatsAvailable) * 100 : 0;
+
+    // Right now the totalRevenue and NetRevenve is same as we dont have the now of refunded class booking.
+    return res.status(200).json({
+      classId,
+      className: classData.topic || "N/A",
+      totalSlots: classSlots.length,
+      totalSeatsAvailable,
+      totalRemainingSeats,
+      bookedSeats,
+      classCost,
+      totalRevenue,
+      averageTicketPrice,
+      conversionRate,
+    });
+
+  } catch (error) {
+    console.error("Error in getClassRevenue:", error);
+    next(error);
+  }
+};
+
+module.exports.getTopTutor = async (req, res, next) => {
+  try {
+    const tutors = await Model.User.aggregate([
+      {
+        $match: {
+          isDeleted: false,
+          role: constants.APP_ROLE.TUTOR
+        }
+      },
+      {
+        $lookup: {
+          from: "bookings",
+          let: { tutorId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$tutorId", "$$tutorId"] }
+              }
+            }
+          ],
+          as: "bookingDocs"
+        }
+      },
+      {
+        $addFields: {
+          bookingSlotIds: {
+            $map: {
+              input: "$bookingDocs",
+              as: "b",
+              in: "$$b.bookSlotId"
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
+          slotCount: { $size: { $setUnion: ["$bookingSlotIds"] } },
+          totalStudents: { $size: "$bookingDocs" }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          username: 1,
+          totalEarn: 1,
+          classEarn: 1,
+          followers: 1,
+          views: 1,
+          avgRating: 1,
+          oneOnOneEarn: 1,
+          booksCount: 1,
+          withdrawAmount: 1,
+          balance: 1,
+          type: 1,
+          role: 1,
+          noOfClasses: "$slotCount",
+          totalStudents: 1   
+        }
+      },
+      {
+        $sort: { totalEarn: -1 }
+      }
+    ]);
+
+    res.status(200).json({ status: 200, message: "success", data: tutors });
+  } catch (error) {
+    console.error("Error in getTopTutor:", error);
+    next(error);
+  }
+};
+
+module.exports.getTopClasses = async (req, res, next) => {
+    try {
+      const result = await Model.Classes.aggregate([
+        {
+          $lookup: {
+            from: "bookings",
+            localField: "_id",
+            foreignField: "bookClassId",
+            as: "bookings"
+          }
+        },
+        {
+          $lookup: {
+            from: "users",              
+            localField: "tutorId",
+            foreignField: "_id",
+            as: "tutorDetails"
+          }
+        },
+        {
+          $lookup: {
+            from: "subjects",
+            localField: "subjectId",
+            foreignField: "_id",
+            as: "subjectDetails"
+          }
+        },
+        {
+          $addFields: {
+            totalBookings: { $size: "$bookings" },
+            revenue: {
+              $sum: {
+                $map: {
+                  input: "$bookings",
+                  as: "booking",
+                  in: { $ifNull: [ "$$booking.grandTotal", 0 ] }
+                }
+              }
+            },
+            totalStudents: { $size: "$bookings" },
+            tutorName: {
+              $arrayElemAt: [ "$tutorDetails.name", 0 ]
+            },
+            subjectName: {
+              $arrayElemAt: [ "$subjectDetails.name", 0 ]
+            }
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            topic: 1,
+            totalBookings: 1,
+            revenue: 1,
+            totalStudents: 1,
+            avgRating: 1,
+            tutorName: 1,
+            subjectName: 1,
+          }
+        },
+        {
+          $sort: { revenue: -1 }
+        }
+      ]);
+      res.status(200).json({
+        status: true,
+        data: result
+      });
+    } catch (error) {
+      console.error("Error in getTopClassesWithBookings:", error);
+      next(error);
+    }
+  };

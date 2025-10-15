@@ -71,7 +71,10 @@ module.exports = {
         DOCUMENT_NOT_FOUND: "Document not found",
         DOCUMENT_APPROVED_SUCCESSFULLY: "Document approved successfully",
         DOCUMENT_REJECTED_SUCCESSFULLY: "Document rejected successfully",
+        DOCUMENT_REQUEST_SENT_SUCCESSFULLY: "Document request sent successfully",
         EMAIL_NOT_FOUND: "Email is not registered",
+        EMAIL_MISSING: "Email is missing",
+        EMAIL_SENDING_FAILED: "Failed to send email",
         REMOVED_FROM_WISHLIST: "Remove from wishlist",
         ADDED_TO_WISHLIST: "Added to wishlist",
         BOOKING_ADDED: "Booked lesson is added",
@@ -424,6 +427,19 @@ module.exports = {
         PENDING: 1,
         VERIFIED: 2,
         REJECTED: 3
+    },
+
+    // Dyte Webhook Events
+    DYTE_WEBHOOK_EVENTS: {
+        MEETING_STARTED: 'meeting.started',
+        MEETING_ENDED: 'meeting.ended',
+        PARTICIPANT_JOINED: 'meeting.participantJoined',
+        PARTICIPANT_LEFT: 'meeting.participantLeft',
+        RECORDING_STATUS_UPDATE: 'recording.statusUpdate',
+        LIVESTREAM_STATUS_UPDATE: 'livestreaming.statusUpdate',
+        CHAT_SYNCED: 'meeting.chatSynced',
+        TRANSCRIPT: 'meeting.transcript',
+        SUMMARY: 'meeting.summary'
     },
     REFUND_STATUS: {
         ACCEPTED: 1,

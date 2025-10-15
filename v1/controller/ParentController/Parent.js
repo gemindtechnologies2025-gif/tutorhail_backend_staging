@@ -1665,6 +1665,7 @@ module.exports.getTutor = async (req, res, next) => {
           isActive: 1,
           isOnline: 1,
           bannerImg: 1,
+          isOnline: 1,
           "teachingdetails.startTime": 1,
           "teachingdetails.endTime": 1,
           "teachingdetails.totalTeachingExperience": 1,
@@ -1911,6 +1912,7 @@ module.exports.tutor = async (req, res, next) => {
           isFollowing: 1,
           followers: 1,
           views: 1,
+          isOnline: 1,
           bannerImg: 1,
           "teachingdetails.educationLevel": 1,
           "teachingdetails.teachingLanguage": 1,
@@ -2123,7 +2125,7 @@ module.exports.addBooking = async (req, res, next) => {
     let calDist = req.body.distance;
     const countryISOCode = req.user?.countryISOCode || 'US';
     let setting = await Model.AppSetting.findOne({
-      countryCode: countryISOCode,
+      currency: req.body.currency,
       isDeleted: false
     }).select("serviceFees serviceType distanceAmount distanceType");
 
@@ -2133,6 +2135,8 @@ module.exports.addBooking = async (req, res, next) => {
     let servicePrice = setting.serviceFees;
 
     let bookingDistance = calDist / 1000;
+
+    console.log('distancePrice', countryISOCode, calDist, distancePrice, distanceType, bookingDistance);
 
     if (distancePrice > 0) {
       if (distanceType === constants.DISTANCE_TYPE.KILOMETER) {

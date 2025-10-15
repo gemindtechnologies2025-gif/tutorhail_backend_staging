@@ -35,6 +35,10 @@ router.put("/updateTutor", Auth.verify("admin"), Controller.AdminController.upda
 router.delete("/deleteTutor/:id", Auth.verify("admin"), Controller.AdminController.deleteTutor);
 router.get("/tutorExport", Auth.verify("admin"), Controller.AdminController.tutorExport);
 router.get("/getTutorDetails/:id", Auth.verify("admin"), Controller.AdminController.getTutorDetails);
+router.get("/getTopTutor", Auth.verify("admin"), Controller.AdminController.getTopTutor);
+
+//Get All Users (Tutors and Parents)
+router.get("/getAllUsers", Auth.verify("admin"), Controller.AdminController.getAllUsers);
 
 //Tutor - Teaching Details
 router.post("/teachingDetails", Auth.verify("admin"), Controller.AdminController.teachingDetails);
@@ -54,6 +58,7 @@ router.put("/updateDocuments/:id", Auth.verify("admin"), Controller.AdminControl
 router.delete("/deleteDocuments/:id", Auth.verify("admin"), Controller.AdminController.deleteDocuments);
 router.put("/approveDocument/:id", Auth.verify("admin"), Controller.AdminController.approveDocument);
 router.put("/rejectDocument/:id", Auth.verify("admin"), Controller.AdminController.rejectDocument);
+router.post("/requestDocument", Auth.verify("admin"), Controller.AdminController.requestDocument);
 
 //Tutor - review
 router.get("/tutorReview/:id", Auth.verify("admin"), Controller.AdminController.tutorReview);
@@ -123,6 +128,7 @@ router.put("/updateClass/:id", Auth.verify("admin"), Controller.AdminController.
 router.delete("/deleteClass/:id", Auth.verify("admin"), Controller.AdminController.deleteClass);
 router.get("/classExport", Auth.verify("admin"), Controller.AdminController.classExport);
 router.get("/classDetails", Auth.verify("admin"), Controller.AdminController.classDetails);
+router.get("/getClassRevenue/:classId", Auth.verify("admin"), Controller.AdminController.getClassRevenue);
 
 
 //Promo Codes
@@ -170,9 +176,10 @@ router.delete("/subjects/:id", Auth.verify("admin"), Controller.AdminController.
 //Category Subject
 router.get("/catSubList", Auth.verify("admin"), Controller.AdminController.catSubList);
 
-//Class Booking
+//Class 
 router.get("/classBook", Auth.verify("admin"), Controller.AdminController.getBookedClasses);
 router.get("/classBook/:id", Auth.verify("admin"), Controller.AdminController.bookClassById);
+router.get("/getTopClasses", Auth.verify("admin"), Controller.AdminController.getTopClasses);
 
 //Content Report
 router.get("/contentReport", Auth.verify("admin"), Controller.AdminController.getContentReport);
@@ -201,5 +208,9 @@ router.delete("/classReport/:id", Auth.verify("admin"), Controller.AdminControll
 //All reports
 router.get("/reports", Auth.verify("admin"), Controller.AdminController.getReports);
 router.get("/reportsCount", Auth.verify("admin"), Controller.AdminController.reportsCount);
+
+//Meeting Analytics
+router.get('/meeting/chat-analytics/:classId/:slotId', Auth.verify("admin"), Controller.AdminController.getChatAnalytics);
+router.get('/meeting/analytics/:classId/:slotId', Auth.verify("admin"), Controller.AdminController.getMeetingAnalytics);
 
 module.exports = router;
