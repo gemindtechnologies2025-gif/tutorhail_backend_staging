@@ -37,6 +37,9 @@ router.get("/tutorExport", Auth.verify("admin"), Controller.AdminController.tuto
 router.get("/getTutorDetails/:id", Auth.verify("admin"), Controller.AdminController.getTutorDetails);
 router.get("/getTopTutor", Auth.verify("admin"), Controller.AdminController.getTopTutor);
 
+//Get All Users (Tutors and Parents)
+router.get("/getAllUsers", Auth.verify("admin"), Controller.AdminController.getAllUsers);
+
 //Tutor - Teaching Details
 router.post("/teachingDetails", Auth.verify("admin"), Controller.AdminController.teachingDetails);
 router.get("/getTeachingDetails/:id", Auth.verify("admin"), Controller.AdminController.getTeachingDetails);

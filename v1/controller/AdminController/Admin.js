@@ -1640,6 +1640,156 @@ module.exports.getTutor = async (req, res, next) => {
   }
 };
 
+//Get All Users (Tutors and Parents) in a single API
+module.exports.getAllUsers = async (req, res, next) => {
+  try {
+    const lang = req.headers.lang || "en";
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 10);
+    const skip = (page - 1) * limit;
+
+    let baseMatch = {};
+    baseMatch.isDeleted = req.query.delete === "true" ? true : false;
+
+    // Role filter - can filter by specific role or get all
+    if (req.query.role) {
+      if (req.query.role === "tutor") {
+        baseMatch.role = constants.APP_ROLE.TUTOR;
+      } else if (req.query.role === "parent") {
+        baseMatch.role = constants.APP_ROLE.PARENT;
+      }
+    } else {
+      // Get both tutors and parents
+      baseMatch.role = { $in: [constants.APP_ROLE.TUTOR, constants.APP_ROLE.PARENT] };
+    }
+
+    // Tutor status filter (only applicable for tutors)
+    if (req.query.tutorStatus) {
+      baseMatch.tutorStatus = Number(req.query.tutorStatus);
+    }
+
+    let pipeline = [
+      {
+        $match: {
+          ...baseMatch,
+          ...(req.query.search && {
+            $or: [
+              { name: { $regex: req.query.search, $options: "i" } },
+              { email: { $regex: req.query.search, $options: "i" } },
+              { phoneNo: { $regex: req.query.search, $options: "i" } },
+              { userName: { $regex: req.query.search, $options: "i" } }
+            ]
+          })
+        }
+      },
+      {
+        $addFields: {
+          roleType: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$role", constants.APP_ROLE.TUTOR] }, then: "tutor" },
+                { case: { $eq: ["$role", constants.APP_ROLE.PARENT] }, then: "parent" }
+              ],
+              default: "unknown"
+            }
+          }
+        }
+      },
+      {
+        $sort: {
+          [req.query.delete === "true" ? "updatedAt" : "createdAt"]: -1
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          userName: 1,
+          email: 1,
+          dialCode: 1,
+          phoneNo: 1,
+          gender: 1,
+          age: 1,
+          image: 1,
+          address: 1,
+          shortBio: 1,
+          role: 1,
+          roleType: 1,
+          tutorStatus: 1,
+          isPhoneVerified: 1,
+          isEmailVerified: 1,
+          isBlocked: 1,
+          isDeleted: 1,
+          isProfileComplete: 1,
+          isActive: 1,
+          isOnline: 1,
+          latitude: 1,
+          longitude: 1,
+          avgRating: 1,
+          followers: 1,
+          views: 1,
+          totalEarn: 1,
+          createdAt: 1,
+          updatedAt: 1
+        }
+      }
+    ];
+
+    // Get counts for different user types
+    const tutorCountPipeline = [
+      {
+        $match: {
+          role: constants.APP_ROLE.TUTOR,
+          isDeleted: req.query.delete === "true" ? true : false
+        }
+      },
+      {
+        $count: "totalTutors"
+      }
+    ];
+
+    const parentCountPipeline = [
+      {
+        $match: {
+          role: constants.APP_ROLE.PARENT,
+          isDeleted: req.query.delete === "true" ? true : false
+        }
+      },
+      {
+        $count: "totalParents"
+      }
+    ];
+
+    const onlineTutorsPipeline = [
+      {
+        $match: {
+          role: constants.APP_ROLE.TUTOR,
+          isDeleted: false,
+          isActive: true
+        }
+      },
+      {
+        $count: "onlineTutors"
+      }
+    ];
+
+    pipeline = await common.pagination(pipeline, skip, limit);
+    const [users] = await Model.User.aggregate(pipeline);
+    const tutorCount = await Model.User.aggregate(tutorCountPipeline);
+    const parentCount = await Model.User.aggregate(parentCountPipeline);
+    const onlineTutors = await Model.User.aggregate(onlineTutorsPipeline);
+
+    return res.success(constants.MESSAGES[lang].DATA_FETCHED, {
+      users: users?.data || [],
+      totalUsers: users?.total || 0,
+      totalTutors: tutorCount?.[0]?.totalTutors || 0,
+      totalParents: parentCount?.[0]?.totalParents || 0,
+      onlineTutors: onlineTutors?.[0]?.onlineTutors || 0
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports.updateTutor = async (req, res, next) => {
   try {
     const lang = req.headers.lang || "en";
