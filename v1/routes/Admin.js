@@ -27,8 +27,7 @@ router.get("/parentExport", Auth.verify("admin"), Controller.AdminController.par
 
 //Parent - Booking Details
 router.get("/parentbooking/:id", Auth.verify("admin"), Controller.AdminController.parentBooking);
-router.get("/getTutorStats", Auth.verify("admin"), Controller.AdminController.getTutorStats);
-router.get("/getParentStats", Auth.verify("admin"), Controller.AdminController.getParentStats);
+
 
 //User - Tutor
 router.post("/addTutor", Auth.verify("admin"), Controller.AdminController.addTutor);
@@ -41,6 +40,8 @@ router.get("/getTopTutor", Auth.verify("admin"), Controller.AdminController.getT
 
 //Get All Users (Tutors and Parents)
 router.get("/getAllUsers", Auth.verify("admin"), Controller.AdminController.getAllUsers);
+router.get("/getTutorStats", Auth.verify("admin"), Controller.AdminController.getTutorStats);
+router.get("/getParentStats", Auth.verify("admin"), Controller.AdminController.getParentStats);
 
 //Tutor - Teaching Details
 router.post("/teachingDetails", Auth.verify("admin"), Controller.AdminController.teachingDetails);

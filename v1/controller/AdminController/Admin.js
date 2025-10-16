@@ -9055,10 +9055,27 @@ module.exports.getTopClasses = async (req, res, next) => {
       const page = Number(req.query.page || 1);
       const limit = Number(req.query.limit || 10);
       const skip = (page - 1) * limit;
-  
+
       let baseMatch = {};
-      baseMatch.isDeleted = req.query.delete === "true" ? true : false;
-  
+
+      if (req.query.status) {
+        if (req.query.status === "active") {
+          baseMatch.isDeleted = false;
+          baseMatch.isActive = true;
+          baseMatch.isBlocked = false;
+        } else if (req.query.status === "inactive") {
+          baseMatch.isDeleted = false;
+          baseMatch.isActive = false;
+          baseMatch.isBlocked = false;
+        } else if (req.query.status === "deleted") {
+          baseMatch.isDeleted = true;
+        } else if (req.query.status === "blocked") {
+          baseMatch.isBlocked = true;
+        }
+      } else {
+        baseMatch.isDeleted = req.query.delete === "true" ? true : false;
+      }
+
       if (req.query.role) {
         if (req.query.role === "tutor") {
           baseMatch.role = constants.APP_ROLE.TUTOR;
@@ -9068,15 +9085,18 @@ module.exports.getTopClasses = async (req, res, next) => {
       } else {
         baseMatch.role = { $in: [constants.APP_ROLE.TUTOR, constants.APP_ROLE.PARENT] };
       }
-  
+
       if (req.query.tutorStatus) {
         baseMatch.tutorStatus = Number(req.query.tutorStatus);
       }
-  
+
       let pipeline = [
         {
           $match: {
             ...baseMatch,
+            ...(req.query.name && {
+              name: { $regex: req.query.name, $options: "i" }
+            }),
             ...(req.query.search && {
               $or: [
                 { name: { $regex: req.query.search, $options: "i" } },
@@ -9102,7 +9122,7 @@ module.exports.getTopClasses = async (req, res, next) => {
         },
         {
           $sort: {
-            [req.query.delete === "true" ? "updatedAt" : "createdAt"]: -1
+            [baseMatch.isDeleted ? "updatedAt" : "createdAt"]: -1
           }
         },
         {
@@ -9138,7 +9158,7 @@ module.exports.getTopClasses = async (req, res, next) => {
           }
         }
       ];
-  
+
       const tutorCountPipeline = [
         {
           $match: {
@@ -9150,7 +9170,7 @@ module.exports.getTopClasses = async (req, res, next) => {
           $count: "totalTutors"
         }
       ];
-  
+
       const parentCountPipeline = [
         {
           $match: {
@@ -9162,7 +9182,7 @@ module.exports.getTopClasses = async (req, res, next) => {
           $count: "totalParents"
         }
       ];
-  
+
       const onlineTutorsPipeline = [
         {
           $match: {
@@ -9220,7 +9240,7 @@ module.exports.getTopClasses = async (req, res, next) => {
           $count: "inActiveUsers"
         }
       ];
-      const nullUsersPipeline = [ 
+      const nullUsersPipeline = [
         {
           $match: {
             role: { $in: [constants.APP_ROLE.TUTOR, constants.APP_ROLE.PARENT] },
@@ -9232,23 +9252,23 @@ module.exports.getTopClasses = async (req, res, next) => {
           $count: "inActiveUsers"
         }
       ];
-  
+
       pipeline = await common.pagination(pipeline, skip, limit);
       const [users] = await Model.User.aggregate(pipeline);
       const tutorCount = await Model.User.aggregate(tutorCountPipeline);
       const parentCount = await Model.User.aggregate(parentCountPipeline);
       const onlineTutors = await Model.User.aggregate(onlineTutorsPipeline);
       const totalUsersCount = await Model.User.aggregate(totalUsersPipeline);
-      const activeUsersCount = await Model.User.aggregate(activeUsersPipeline);  
-      const inActiveUsersCount = await Model.User.aggregate(inActiveUsersPipeline);  
+      const activeUsersCount = await Model.User.aggregate(activeUsersPipeline);
+      const inActiveUsersCount = await Model.User.aggregate(inActiveUsersPipeline);
       const nullUsersCount = await Model.User.aggregate(nullUsersPipeline);
       const deletedUsersCount = await Model.User.aggregate(deletedUsersPipeline);
-  
+
       return res.success(constants.MESSAGES[lang].DATA_FETCHED, {
         users: users?.data || [],
         totalUsers: totalUsersCount?.[0]?.totalUsers || 0,
-        activeUsers: activeUsersCount?.[0]?.activeUsers || 0,  
-        inActiveUsers: inActiveUsersCount?.[0]?.inActiveUsers || 0,  
+        activeUsers: activeUsersCount?.[0]?.activeUsers || 0,
+        inActiveUsers: inActiveUsersCount?.[0]?.inActiveUsers || 0,
         deletedUsers: deletedUsersCount?.[0]?.inActiveUsers || 0,
         nullUsers: nullUsersCount?.[0]?.inActiveUsers || 0,
         totalTutors: tutorCount?.[0]?.totalTutors || 0,
@@ -9258,7 +9278,8 @@ module.exports.getTopClasses = async (req, res, next) => {
     } catch (error) {
       next(error);
     }
-  };
+};
+
   
   module.exports.getTutorStats = async (req, res, next) => {
     try {
