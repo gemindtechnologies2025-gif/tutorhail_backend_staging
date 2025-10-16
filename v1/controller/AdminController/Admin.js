@@ -9313,3 +9313,56 @@ module.exports.getTopClasses = async (req, res, next) => {
     }
   };
   
+  module.exports.getParentStats = async (req, res, next) => {
+    try {
+      const totalParentsPipeline = [
+        { $match: { role: constants.APP_ROLE.PARENT } },
+        { $count: "totalParents" }
+      ];
+  
+      const activeParentsPipeline = [
+        { $match: { role: constants.APP_ROLE.PARENT, isActive: true, isDeleted: false } },
+        { $count: "activeParents" }
+      ];
+  
+      const inActiveParentsPipeline = [
+        { $match: { role: constants.APP_ROLE.PARENT, isActive: false, isDeleted: false } },
+        { $count: "inActiveParents" }
+      ];
+  
+      const nullParentsPipeline = [
+        { $match: { role: constants.APP_ROLE.PARENT, isActive: { $exists: false }, isDeleted: false } },
+        { $count: "nullParents" }
+      ];
+  
+      const deletedParentsPipeline = [
+        { $match: { role: constants.APP_ROLE.PARENT, isDeleted: true } },
+        { $count: "deletedParents" }
+      ];
+  
+      const [
+        totalParentsResult,
+        activeParentsResult,
+        inActiveParentsResult,
+        nullParentsResult,
+        deletedParentsResult
+      ] = await Promise.all([
+        Model.User.aggregate(totalParentsPipeline),
+        Model.User.aggregate(activeParentsPipeline),
+        Model.User.aggregate(inActiveParentsPipeline),
+        Model.User.aggregate(nullParentsPipeline),
+        Model.User.aggregate(deletedParentsPipeline)
+      ]);
+  
+      return res.success("Parent stats fetched", {
+        totalParents: totalParentsResult?.[0]?.totalParents || 0,
+        activeParents: activeParentsResult?.[0]?.activeParents || 0,
+        inActiveParents: inActiveParentsResult?.[0]?.inActiveParents || 0,
+        nullParents: nullParentsResult?.[0]?.nullParents || 0,
+        deletedParents: deletedParentsResult?.[0]?.deletedParents || 0
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+  
