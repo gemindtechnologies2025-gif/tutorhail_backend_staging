@@ -42,6 +42,8 @@ router.get("/getTopTutor", Auth.verify("admin"), Controller.AdminController.getT
 router.get("/getAllUsers", Auth.verify("admin"), Controller.AdminController.getAllUsers);
 router.get("/getTutorStats", Auth.verify("admin"), Controller.AdminController.getTutorStats);
 router.get("/getParentStats", Auth.verify("admin"), Controller.AdminController.getParentStats);
+router.get("/getInactiveUsers", Auth.verify("admin"), Controller.AdminController.getInactiveUsers);
+router.get("/getInactiveUserStats", Auth.verify("admin"), Controller.AdminController.getInactiveUserStats);
 
 //Tutor - Teaching Details
 router.post("/teachingDetails", Auth.verify("admin"), Controller.AdminController.teachingDetails);

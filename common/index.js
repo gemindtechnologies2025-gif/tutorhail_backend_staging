@@ -4,5 +4,6 @@ module.exports = {
     constants: require("./constants"),
     functions: require("./functions"),
     responses: require("./responses"),
-    processes: require("./processes")
+    processes: require("./processes"),
+    activityTracker: require("./activityTracker")
 };

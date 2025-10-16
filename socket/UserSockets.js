@@ -216,10 +216,13 @@ module.exports = (io, socket, socketData) => {
   socket.on("updateTutorStatus", async (data) => {
     try {
       const tutorId = socketData._id;
-      const isActive = data?.isActive ?? false;
+      const isAvailableForBooking = data?.isAvailableForBooking ?? data?.isActive ?? false; // Support both field names for backward compatibility
       
-      await Model.User.findByIdAndUpdate(tutorId, { isActive });
-      io.to("watchTutorStatus").emit("tutorStatusUpdate", { tutorId, isActive });
+      await Model.User.findByIdAndUpdate(tutorId, { 
+        isAvailableForBooking,
+        lastActivityAt: new Date() // Update activity timestamp
+      });
+      io.to("watchTutorStatus").emit("tutorStatusUpdate", { tutorId, isAvailableForBooking, isActive: isAvailableForBooking }); // Send both for compatibility
     } catch (error) {
       console.error(error.message || error);
     }
