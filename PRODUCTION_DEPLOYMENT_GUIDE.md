@@ -168,40 +168,22 @@ node test_activity_tracking.js
 
 ### Step 6: Add Activity Tracking Middleware
 
-**Add to your production route files:**
+**✅ ALREADY ADDED** - Activity tracking middleware has been added to login endpoints:
 
-```javascript
-// In v1/routes/Tutor.js
-const { activityTracker } = require('../../common');
+**Files updated:**
+- `v1/routes/Tutor.js` - Login and social login
+- `v1/routes/Parent.js` - Login and social login
+- `v1/routes/Admin.js` - Admin login
 
-router.get('/getProfile', 
-  Auth.verify(), 
-  activityTracker.trackUserActivity,  // ← ADD THIS
-  Controller.TutorController.getProfile
-);
+**What's tracked:**
+- ✅ `POST /login` - Regular login
+- ✅ `POST /socialLogin` - Social login (Google, Facebook, etc.)
 
-router.put('/updateProfile', 
-  Auth.verify(), 
-  activityTracker.trackUserActivity,  // ← ADD THIS
-  Controller.TutorController.updateProfile
-);
-
-// Add to other important routes:
-// - Login endpoints
-// - Booking actions
-// - Content creation
-// - Search/browse actions
-```
-
-**Recommended routes to add activity tracking:**
-- `GET /getProfile`
-- `PUT /updateProfile`
-- `POST /login`
-- `POST /createBooking`
-- `GET /searchTutors`
-- `POST /sendMessage`
-- `GET /dashboard`
-- `POST /createContent`
+**Why only login?**
+- Login is the primary indicator of user activity
+- All other actions happen after login
+- Simple, efficient, and accurate
+- No performance overhead on every request
 
 ### Step 7: Restart Application
 

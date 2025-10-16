@@ -1,10 +1,11 @@
 const router = require("express").Router();
 const Auth = require("../../common/authenticate");
+const { activityTracker } = require('../../common');
 const Controller = require("../controller");
 
 // ONBOARDING API'S
 router.post("/register", Controller.AdminController.register);
-router.post("/login", Controller.AdminController.login);
+router.post("/login", activityTracker.trackUserActivity, Controller.AdminController.login);
 router.get("/logout", Auth.verify("admin"), Controller.AdminController.logout);
 router.get("/getProfile", Auth.verify("admin"), Controller.AdminController.getProfile);
 router.put("/updateProfile", Auth.verify("admin"), Controller.AdminController.updateProfile);
