@@ -27,6 +27,7 @@ router.get("/parentExport", Auth.verify("admin"), Controller.AdminController.par
 
 //Parent - Booking Details
 router.get("/parentbooking/:id", Auth.verify("admin"), Controller.AdminController.parentBooking);
+router.get("/getTutorStats", Auth.verify("admin"), Controller.AdminController.getTutorStats);
 
 //User - Tutor
 router.post("/addTutor", Auth.verify("admin"), Controller.AdminController.addTutor);
