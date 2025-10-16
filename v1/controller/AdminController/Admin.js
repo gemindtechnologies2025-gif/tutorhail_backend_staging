@@ -9260,3 +9260,56 @@ module.exports.getTopClasses = async (req, res, next) => {
     }
   };
   
+  module.exports.getTutorStats = async (req, res, next) => {
+    try {
+      const totalTutorsPipeline = [
+        { $match: { role: constants.APP_ROLE.TUTOR } },
+        { $count: "totalTutors" }
+      ];
+  
+      const activeTutorsPipeline = [
+        { $match: { role: constants.APP_ROLE.TUTOR, isActive: true, isDeleted: false } },
+        { $count: "activeTutors" }
+      ];
+  
+      const inActiveTutorsPipeline = [
+        { $match: { role: constants.APP_ROLE.TUTOR, isActive: false, isDeleted: false } },
+        { $count: "inActiveTutors" }
+      ];
+  
+      const nullTutorsPipeline = [
+        { $match: { role: constants.APP_ROLE.TUTOR, isActive: { $exists: false }, isDeleted: false } },
+        { $count: "nullTutors" }
+      ];
+  
+      const deletedTutorsPipeline = [
+        { $match: { role: constants.APP_ROLE.TUTOR, isDeleted: true } },
+        { $count: "deletedTutors" }
+      ];
+  
+      const [
+        totalTutorsResult,
+        activeTutorsResult,
+        inActiveTutorsResult,
+        nullTutorsResult,
+        deletedTutorsResult
+      ] = await Promise.all([
+        Model.User.aggregate(totalTutorsPipeline),
+        Model.User.aggregate(activeTutorsPipeline),
+        Model.User.aggregate(inActiveTutorsPipeline),
+        Model.User.aggregate(nullTutorsPipeline),
+        Model.User.aggregate(deletedTutorsPipeline)
+      ]);
+  
+      return res.success("Tutor stats fetched", {
+        totalTutors: totalTutorsResult?.[0]?.totalTutors || 0,
+        activeTutors: activeTutorsResult?.[0]?.activeTutors || 0,
+        inActiveTutors: inActiveTutorsResult?.[0]?.inActiveTutors || 0,
+        nullTutors: nullTutorsResult?.[0]?.nullTutors || 0,
+        deletedTutors: deletedTutorsResult?.[0]?.deletedTutors || 0
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+  
