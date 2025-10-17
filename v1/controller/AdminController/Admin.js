@@ -9061,11 +9061,11 @@ module.exports.getTopClasses = async (req, res, next) => {
       if (req.query.status) {
         if (req.query.status === "active") {
           baseMatch.isDeleted = false;
-          baseMatch.isActive = true;
+          baseMatch.isActive = true; // Keep this for account activity (60-day tracking)
           baseMatch.isBlocked = false;
         } else if (req.query.status === "inactive") {
           baseMatch.isDeleted = false;
-          baseMatch.isActive = false;
+          baseMatch.isActive = false; // Keep this for account activity (60-day tracking)
           baseMatch.isBlocked = false;
         } else if (req.query.status === "deleted") {
           baseMatch.isDeleted = true;
@@ -9382,6 +9382,107 @@ module.exports.getTopClasses = async (req, res, next) => {
         nullParents: nullParentsResult?.[0]?.nullParents || 0,
         deletedParents: deletedParentsResult?.[0]?.deletedParents || 0
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Get list of inactive users (no activity in last N days)
+   * Query params: days (default: 60), role (optional), page, limit
+   */
+  module.exports.getInactiveUsers = async (req, res, next) => {
+    try {
+      const days = parseInt(req.query.days) || 60;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+      
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+
+      let matchQuery = {
+        lastActivityAt: { $lt: cutoffDate },
+        isDeleted: false,
+        isBlocked: false
+      };
+
+      // Optional role filter
+      if (req.query.role) {
+        if (req.query.role === 'tutor') {
+          matchQuery.role = constants.APP_ROLE.TUTOR;
+        } else if (req.query.role === 'parent') {
+          matchQuery.role = constants.APP_ROLE.PARENT;
+        }
+      }
+
+      const [users, totalCount] = await Promise.all([
+        Model.User.find(matchQuery)
+          .select('_id name email phoneNo role lastActivityAt isActive createdAt')
+          .sort({ lastActivityAt: 1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Model.User.countDocuments(matchQuery)
+      ]);
+
+      return res.success("Inactive users fetched successfully", {
+        users,
+        pagination: {
+          page,
+          limit,
+          total: totalCount,
+          pages: Math.ceil(totalCount / limit)
+        },
+        inactiveSince: cutoffDate.toISOString()
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Get inactive users statistics grouped by role
+   * Query params: days (default: 60)
+   */
+  module.exports.getInactiveUserStats = async (req, res, next) => {
+    try {
+      const days = parseInt(req.query.days) || 60;
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+
+      const stats = await Model.User.aggregate([
+        {
+          $match: {
+            lastActivityAt: { $lt: cutoffDate },
+            isDeleted: false,
+            isBlocked: false
+          }
+        },
+        {
+          $group: {
+            _id: '$role',
+            count: { $sum: 1 },
+            oldestActivity: { $min: '$lastActivityAt' },
+            newestActivity: { $max: '$lastActivityAt' }
+          }
+        }
+      ]);
+
+      // Format the stats
+      const formattedStats = {
+        inactiveDays: days,
+        cutoffDate: cutoffDate.toISOString(),
+        totalInactiveUsers: stats.reduce((sum, s) => sum + s.count, 0),
+        byRole: stats.map(s => ({
+          role: s._id === constants.APP_ROLE.TUTOR ? 'tutor' : 'parent',
+          count: s.count,
+          oldestActivity: s.oldestActivity,
+          newestActivity: s.newestActivity
+        }))
+      };
+
+      return res.success("Inactive user stats fetched successfully", formattedStats);
     } catch (error) {
       next(error);
     }
