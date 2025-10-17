@@ -9386,6 +9386,104 @@ module.exports.getTopClasses = async (req, res, next) => {
       next(error);
     }
   };
+  
+  module.exports.getFilteredTutors = async (req, res, next) => {
+    try {
+      const lang = req.headers.lang || "en";
+      const page = Number(req.query.page || 1);
+      const limit = Number(req.query.limit || 10);
+      const skip = (page - 1) * limit;
+  
+      let baseMatch = { 
+        role: constants.APP_ROLE.TUTOR, 
+        isDeleted: false
+      };
+  
+      let pipeline = [
+        { $match: baseMatch },
+        {
+          $lookup: {
+            from: 'teachingdetails',
+            localField: '_id',
+            foreignField: 'tutorId',
+            as: 'teachingdetails'
+          }
+        },
+        { $unwind: { path: "$teachingdetails", preserveNullAndEmptyArrays: true } },
+  
+        ...(req.query.categoryId
+          ? [{ $match: { "teachingdetails.categoryId": ObjectId(req.query.categoryId) } }]
+          : []),
+  
+        ...(req.query.subjectId
+          ? [{ $match: { "teachingdetails.subjectIds": ObjectId(req.query.subjectId) } }]
+          : []),
+  
+        ...(req.query.country
+          ? [{ $match: { address: { $regex: req.query.country, $options: "i" } } }]
+          : []),
+  
+        ...(req.query.subjectId
+          ? [{
+              $lookup: {
+                from: "subjects",
+                let: { subjectIds: "$teachingdetails.subjectIds" },
+                pipeline: [
+                  { $match: { $expr: { $eq: ["$_id", ObjectId(req.query.subjectId)] } } },
+                  { $project: { name: 1 } }
+                ],
+                as: "selectedSubject"
+              }
+            }]
+          : [{
+              $lookup: {
+                from: "subjects",
+                localField: "teachingdetails.subjectIds",
+                foreignField: "_id",
+                as: "subjects"
+              }
+            }]),
+  
+        {
+          $lookup: {
+            from: "categories",
+            localField: "teachingdetails.categoryId",
+            foreignField: "_id",
+            as: "categories"
+          }
+        },
+        { $sort: { createdAt: -1 } },
+  
+        {
+          $project: {
+            name: 1,
+            userName: 1,
+            email: 1,
+            image: 1,
+            avgRating: 1,
+            experience: "$teachingdetails.totalTeachingExperience",
+            categories: { $arrayElemAt: [ "$categories.name", 0 ] },
+            subject: req.query.subjectId
+              ? { $arrayElemAt: [ "$selectedSubject.name", 0 ] }
+              : "$subjects.name",
+            createdAt: 1,
+            country: {
+              $arrayElemAt: [
+                { $split: ["$address", " "] },
+                { $subtract: [ { $size: { $split: ["$address", " "] } }, 1 ] }
+              ]
+            }
+          }
+        }
+      ];
+  
+      pipeline = await common.pagination(pipeline, skip, limit);
+      const [tutors] = await Model.User.aggregate(pipeline);
+  
+      return res.success(constants.MESSAGES[lang].DATA_FETCHED, {
+        tutors: tutors?.data || [],
+        totalTutors: tutors?.total || 0
+      });
 
   /**
    * Get list of inactive users (no activity in last N days)
