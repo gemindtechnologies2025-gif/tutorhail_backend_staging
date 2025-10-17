@@ -37,6 +37,7 @@ router.delete("/deleteTutor/:id", Auth.verify("admin"), Controller.AdminControll
 router.get("/tutorExport", Auth.verify("admin"), Controller.AdminController.tutorExport);
 router.get("/getTutorDetails/:id", Auth.verify("admin"), Controller.AdminController.getTutorDetails);
 router.get("/getTopTutor", Auth.verify("admin"), Controller.AdminController.getTopTutor);
+router.get("/getFilteredTutors", Auth.verify("admin"), Controller.AdminController.getFilteredTutors);
 
 //Get All Users (Tutors and Parents)
 router.get("/getAllUsers", Auth.verify("admin"), Controller.AdminController.getAllUsers);
