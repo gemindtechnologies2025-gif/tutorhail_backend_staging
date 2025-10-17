@@ -54,8 +54,10 @@ let userSchema = new Schema({
   isPasswordSet: { type: Boolean, default: false },
   isProfileComplete: { type: Boolean, default: false },
   profileCompletedAt: { type: Number, default: 0 },
-  isActive: { type: Boolean, default: true },
-  isOnline: { type: Boolean, default: false },
+  isAvailableForBooking: { type: Boolean, default: true }, // Tutor availability to accept bookings (user-controlled)
+  isActive: { type: Boolean, default: true, index: true }, // Account activity status (logged in within last 60 days)
+  lastActivityAt: { type: Date, default: Date.now, index: true }, // Last time user performed any action
+  isOnline: { type: Boolean, default: false }, // Currently connected via WebSocket
   isBookLogin: { type: Boolean, default: false },
   bannerImg: { type: String, default: "" },
   longitude: { type: Number, default: 0 },

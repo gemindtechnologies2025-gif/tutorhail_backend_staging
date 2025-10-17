@@ -45,7 +45,8 @@ module.exports.updateProfile = Joi.object({
     countryISOCode: Joi.string().optional(),
     latitude: Joi.number().optional(),
     longitude: Joi.number().optional(),
-    isActive: Joi.boolean().optional(),
+    isActive: Joi.boolean().optional(), // Account activity status (60-day tracking)
+    isAvailableForBooking: Joi.boolean().optional(), // Booking availability status
     profileCompletedAt: Joi.number().optional(),
     bannerImg: Joi.string().optional()
 });

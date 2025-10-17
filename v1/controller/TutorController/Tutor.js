@@ -313,7 +313,7 @@ module.exports.logout = async (req, res, next) => {
     ) {
       await Model.User.updateOne(
         { _id: req.user._id },
-        { $set: { isActive: false } }
+        { $set: { isAvailableForBooking: false } }
       );
     }
 

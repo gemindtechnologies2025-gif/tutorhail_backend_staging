@@ -6,6 +6,7 @@ const tutor = require("../v1/controller/TutorController/Tutor");
 const Model = require("../models/index");
 const ObjectId = mongoose.Types.ObjectId;
 const constants = require("../common/constants");
+const { markInactiveUsers } = require("../common/activityTracker");
 
 //Agenda initialization.
 let agenda;
@@ -17,6 +18,7 @@ module.exports.startCronJobs = async () => {
   console.log("Agenda Started");
   await agenda.start();
   this.createInvoice.start();
+  this.checkInactiveUsers.start();
 };
 //Cron
 module.exports.createInvoice = new CronJob('*/1 * * * *', async function () {
@@ -25,6 +27,17 @@ module.exports.createInvoice = new CronJob('*/1 * * * *', async function () {
     tutor.refundAmountCron();
   } catch (error) {
     console.error("Error in CRON job:", error);
+  }
+});
+
+// Cron job to check and mark inactive users (runs daily at 2 AM)
+module.exports.checkInactiveUsers = new CronJob('0 2 * * *', async function () {
+  try {
+    console.log("CRON Started--------------- Check Inactive Users (Daily at 2 AM)");
+    const result = await markInactiveUsers(60); // Mark users inactive if no activity in last 60 days
+    console.log(`Inactive users check completed: ${result.modifiedCount} users marked as inactive`);
+  } catch (error) {
+    console.error("Error in inactive users CRON job:", error);
   }
 });
 

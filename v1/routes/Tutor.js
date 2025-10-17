@@ -1,11 +1,12 @@
 const Controller = require('../controller');
 const Auth = require("../../common/authenticate");
+const { activityTracker } = require('../../common');
 const router = require('express').Router();
 
 //Onboarding
 router.post("/signup", Controller.TutorController.signup);
-router.post("/socialLogin", Controller.TutorController.socialLogin);
-router.post("/login", Controller.TutorController.login);
+router.post("/socialLogin", activityTracker.trackUserActivity, Controller.TutorController.socialLogin);
+router.post("/login", activityTracker.trackUserActivity, Controller.TutorController.login);
 router.get("/logout", Auth.verify("user"), Controller.TutorController.logout);
 router.get("/getProfile", Auth.verify("user"), Controller.TutorController.getProfile);
 router.delete("/deleteProfile", Auth.verify("user"), Controller.TutorController.deleteProfile);

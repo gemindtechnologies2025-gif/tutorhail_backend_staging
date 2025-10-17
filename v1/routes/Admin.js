@@ -1,10 +1,11 @@
 const router = require("express").Router();
 const Auth = require("../../common/authenticate");
+const { activityTracker } = require('../../common');
 const Controller = require("../controller");
 
 // ONBOARDING API'S
 router.post("/register", Controller.AdminController.register);
-router.post("/login", Controller.AdminController.login);
+router.post("/login", activityTracker.trackUserActivity, Controller.AdminController.login);
 router.get("/logout", Auth.verify("admin"), Controller.AdminController.logout);
 router.get("/getProfile", Auth.verify("admin"), Controller.AdminController.getProfile);
 router.put("/updateProfile", Auth.verify("admin"), Controller.AdminController.updateProfile);
@@ -43,6 +44,8 @@ router.get("/getFilteredTutors", Auth.verify("admin"), Controller.AdminControlle
 router.get("/getAllUsers", Auth.verify("admin"), Controller.AdminController.getAllUsers);
 router.get("/getTutorStats", Auth.verify("admin"), Controller.AdminController.getTutorStats);
 router.get("/getParentStats", Auth.verify("admin"), Controller.AdminController.getParentStats);
+router.get("/getInactiveUsers", Auth.verify("admin"), Controller.AdminController.getInactiveUsers);
+router.get("/getInactiveUserStats", Auth.verify("admin"), Controller.AdminController.getInactiveUserStats);
 
 //Tutor - Teaching Details
 router.post("/teachingDetails", Auth.verify("admin"), Controller.AdminController.teachingDetails);
