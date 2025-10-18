@@ -9450,27 +9450,22 @@ module.exports.getTopClasses = async (req, res, next) => {
         },
         { $unwind: { path: "$teachingdetails", preserveNullAndEmptyArrays: true } },
   
-        // Category filter
         ...(req.query.categoryId
           ? [{ $match: { "teachingdetails.categoryId": ObjectId(req.query.categoryId) } }]
           : []),
   
-        // Subject filter
         ...(req.query.subjectId
           ? [{ $match: { "teachingdetails.subjectIds": ObjectId(req.query.subjectId) } }]
           : []),
   
-        // Grade filter (from enum text to number)
         ...(req.query.grade
           ? [{ $match: { "teachingdetails.classes": GRADE_TYPE[req.query.grade.toUpperCase()] } }]
           : []),
   
-        // Country filter in address
         ...(req.query.country
           ? [{ $match: { address: { $regex: req.query.country, $options: "i" } } }]
           : []),
   
-        // Search (name, email, username, phone)
         ...(req.query.search
           ? [{
             $match: {
@@ -9484,7 +9479,6 @@ module.exports.getTopClasses = async (req, res, next) => {
           }]
           : []),
   
-        // Lookup category names
         {
           $lookup: {
             from: "categories",
@@ -9494,7 +9488,6 @@ module.exports.getTopClasses = async (req, res, next) => {
           }
         },
   
-        // Lookup subject names
         ...(req.query.subjectId
           ? [{
               $lookup: {
@@ -9532,7 +9525,6 @@ module.exports.getTopClasses = async (req, res, next) => {
             subject: req.query.subjectId
               ? { $arrayElemAt: [ "$selectedSubject.name", 0 ] }
               : "$subjects.name",
-            // Grades: convert enum numbers to text via $map
             grades: {
               $map: {
                 input: "$teachingdetails.classes",
@@ -9549,7 +9541,6 @@ module.exports.getTopClasses = async (req, res, next) => {
               }
             },
             createdAt: 1,
-            // Country (last word from address)
             country: {
               $arrayElemAt: [
                 { $split: ["$address", " "] },
