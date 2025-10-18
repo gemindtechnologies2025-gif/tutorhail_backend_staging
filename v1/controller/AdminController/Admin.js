@@ -14,7 +14,6 @@ const axios = require("axios");
 const moment = require('moment');
 const pdf = require("html-pdf-node");
 
-// Helper function to get document type name
 const getDocumentTypeName = (documentType) => {
   switch (documentType) {
     case constants.DOCUMENT_TYPE.ID_PROOF:
@@ -33,7 +32,6 @@ const fs = require("fs");
 const cart = require('../PaymentController/pesapalPayment');
 const { classSlots } = require("../ParentController/Parent");
 
-//Signup the admin using email.
 module.exports.register = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
@@ -47,7 +45,6 @@ module.exports.register = async (req, res, next) => {
     }
     req.body.role = constants.ROLE.ADMIN;
     const create = await Model.Admin(req.body).save();
-    //Convert password to hash using bcrypt.
     await create.setPassword(req.body.password);
     await create.save();
     delete create.password;
@@ -56,7 +53,7 @@ module.exports.register = async (req, res, next) => {
     next(error);
   }
 };
-//Login the admin using phoneNo/Email.
+
 module.exports.login = async (req, res, next) => {
   try {
     let lang = req.headers.lang || "en";
@@ -9386,6 +9383,45 @@ module.exports.getTopClasses = async (req, res, next) => {
       next(error);
     }
   };
+  const GRADE_TYPE = {
+    PRE_K: 1,
+    KINDERGARTEN: 2,
+    GRADE_1: 3,
+    GRADE_2: 4,
+    GRADE_3: 5,
+    GRADE_4: 6,
+    GRADE_5: 7,
+    GRADE_6: 8,
+    GRADE_7: 9,
+    GRADE_8: 10,
+    GRADE_9: 11,
+    GRADE_10: 12,
+    GRADE_11: 13,
+    GRADE_12: 14,
+    COLLEGE: 15,
+    ADULT_LEARNING: 16,
+    ALL_AGES: 17
+  };
+  
+  const GRADE_TYPE_TEXT = {
+    1: "Pre-K",
+    2: "Kindergarten",
+    3: "Grade 1",
+    4: "Grade 2",
+    5: "Grade 3",
+    6: "Grade 4",
+    7: "Grade 5",
+    8: "Grade 6",
+    9: "Grade 7",
+    10: "Grade 8",
+    11: "Grade 9",
+    12: "Grade 10",
+    13: "Grade 11",
+    14: "Grade 12",
+    15: "College",
+    16: "Adult Learning",
+    17: "All Ages"
+  };
   
   module.exports.getFilteredTutors = async (req, res, next) => {
     try {
@@ -9419,9 +9455,35 @@ module.exports.getTopClasses = async (req, res, next) => {
           ? [{ $match: { "teachingdetails.subjectIds": ObjectId(req.query.subjectId) } }]
           : []),
   
+        ...(req.query.grade
+          ? [{ $match: { "teachingdetails.classes": GRADE_TYPE[req.query.grade.toUpperCase()] } }]
+          : []),
+  
         ...(req.query.country
           ? [{ $match: { address: { $regex: req.query.country, $options: "i" } } }]
           : []),
+  
+        ...(req.query.search
+          ? [{
+            $match: {
+              $or: [
+                { name: { $regex: req.query.search, $options: "i" } },
+                { email: { $regex: req.query.search, $options: "i" } },
+                { phoneNo: { $regex: req.query.search, $options: "i" } },
+                { userName: { $regex: req.query.search, $options: "i" } }
+              ]
+            }
+          }]
+          : []),
+  
+        {
+          $lookup: {
+            from: "categories",
+            localField: "teachingdetails.categoryId",
+            foreignField: "_id",
+            as: "categories"
+          }
+        },
   
         ...(req.query.subjectId
           ? [{
@@ -9445,14 +9507,8 @@ module.exports.getTopClasses = async (req, res, next) => {
             }]),
   
         {
-          $lookup: {
-            from: "categories",
-            localField: "teachingdetails.categoryId",
-            foreignField: "_id",
-            as: "categories"
-          }
+          $sort: { createdAt: -1 }
         },
-        { $sort: { createdAt: -1 } },
   
         {
           $project: {
@@ -9466,6 +9522,21 @@ module.exports.getTopClasses = async (req, res, next) => {
             subject: req.query.subjectId
               ? { $arrayElemAt: [ "$selectedSubject.name", 0 ] }
               : "$subjects.name",
+            grades: {
+              $map: {
+                input: "$teachingdetails.classes",
+                as: "gradeEnum",
+                in: {
+                  $switch: {
+                    branches: Object.entries(GRADE_TYPE_TEXT).map(([num, text]) => ({
+                      case: { $eq: ["$$gradeEnum", Number(num)] },
+                      then: text
+                    })),
+                    default: "Unknown"
+                  }
+                }
+              }
+            },
             createdAt: 1,
             country: {
               $arrayElemAt: [
